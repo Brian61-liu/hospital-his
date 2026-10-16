@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% set active_menu = 'patients' %}
+{% block title %}{{ p.name }} {{ _('- 患者详情') }}{% endblock %}
+{% block heading %}{{ _('患者档案 /') }} {{ p.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <a class="btn btn-ghost" href="{{ url_for('patients') }}">{{ _('← 返回列表') }}</a>
+    <div class="actions">
+        <a class="btn btn-ghost" href="{{ url_for('patient_edit', pid=p.id) }}">{{ _('编辑信息') }}</a>
+        {% if session.role in ('admin', 'cashier') %}<a class="btn" href="{{ url_for('registration', card=p.card_no) }}">{{ _('为其挂号') }}</a>{% endif %}
+        {% if session.role in ('admin', 'nurse') %}<a class="btn btn-outline" href="{{ url_for('inpatient', card=p.card_no) }}#admit">{{ _('办理入院') }}</a>{% endif %}
+    </div>
+</div>
+
+<div class="grid grid-side-l">
+    <div>
+        <div class="card">
+            <div class="patient-card" style="margin-bottom:16px">
+                <div class="avatar-lg">{{ p.name[0] }}</div>
+                <div><div class="name">{{ p.name }}</div><span class="muted">{{ _(p.gender) }} · {{ p.birth|age }} · {{ p.card_no }}</span></div>
+            </div>
+            {% if p.allergy %}<div class="alert danger"><b>{{ _('药物过敏史：') }}</b>{{ p.allergy }}</div>{% endif %}
+            <dl class="kv">
+                <dt>{{ _('出生日期') }}</dt><dd>{{ p.birth }}</dd>
+                <dt>{{ _('手机号') }}</dt><dd>{{ p.phone }}</dd>
+                <dt>{{ _('身份证号') }}</dt><dd>{{ p.id_card or '—' }}</dd>
+                <dt>{{ _('医保类型') }}</dt><dd><span class="tag">{{ _(p.insurance) }}</span></dd>
+                <dt>{{ _('家庭住址') }}</dt><dd>{{ p.address or '—' }}</dd>
+                <dt>{{ _('建档时间') }}</dt><dd>{{ p.created_at }}</dd>
+            </dl>
+        </div>
+        <div class="card">
+            <div class="card-head"><h3>{{ _('住院记录') }}</h3></div>
+            {% for a in admissions %}
+            <div style="padding:8px 0;border-bottom:1px solid var(--line)">
+                <span class="badge {{ STATUS_CLASS[a.status] }}">{{ _(a.status) }}</span>
+                <b>{{ a.ward }} {{ a.bed_no }}</b>&nbsp; {{ a.diagnosis }}<br>
+                <small>{{ a.admit_date }} {{ _('入院') }}{% if a.discharge_date %}{{ _('，') }}{{ a.discharge_date }} {{ _('出院，费用') }} {{ a.total_fee|money }}{% endif %} {{ _('· 主治') }} {{ a.dname }}</small>
+            </div>
+            {% else %}<div class="empty">{{ _('无住院记录') }}</div>{% endfor %}
+        </div>
+    </div>
+
+    <div>
+        <div class="card">
+            <div class="card-head"><h3>{{ _('门诊就诊记录') }}</h3><span class="muted">{{ _('共') }} {{ visits|length }} {{ _('次') }}</span></div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>{{ _('就诊日期') }}</th><th>{{ _('科室/医生') }}</th><th>{{ _('主诉') }}</th><th>{{ _('诊断') }}</th><th>{{ _('医嘱') }}</th><th>{{ _('状态') }}</th></tr></thead>
+                    <tbody>
+                    {% for v in visits %}
+                    <tr>
+                        <td>{{ v.visit_date }}<br><small>{{ _('{0} {1} 号', _(v.period), v.queue_no) }}</small></td>
+                        <td>{{ v.dept_name }}<br><small>{{ v.dname }}</small></td>
+                        <td>{{ v.complaint or '—' }}</td>
+                        <td><b>{{ v.diagnosis or '—' }}</b></td>
+                        <td><small>{{ v.advice or '—' }}</small></td>
+                        <td><span class="badge {{ STATUS_CLASS[v.status] }}">{{ _(v.status) }}</span></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="empty">{{ _('暂无就诊记录') }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-head"><h3>{{ _('费用明细') }}</h3></div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>{{ _('时间') }}</th><th>{{ _('项目') }}</th><th>{{ _('支付方式') }}</th><th class="num">{{ _('医保支付') }}</th><th class="num">{{ _('个人支付') }}</th></tr></thead>
+                    <tbody>
+                    {% for pay in payments %}
+                    <tr><td>{{ pay.created_at }}</td><td>{{ pay.item }}</td><td>{{ _(pay.method) }}</td>
+                        <td class="num">{{ pay.insurance_pay|money }}</td>
+                        <td class="num" {% if pay.amount < 0 %}style="color:var(--ok)"{% endif %}>{{ pay.amount|money }}</td></tr>
+                    {% else %}
+                    <tr><td colspan="5" class="empty">{{ _('暂无费用记录') }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

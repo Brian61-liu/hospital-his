@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% set active_menu = 'clinic' %}
+{% block title %}{{ _('医生工作站') }}{% endblock %}
+{% block heading %}{{ _('医生工作站') }}{% endblock %}
+{% block content %}
+{% set waiting = queue|selectattr('status', 'equalto', '待诊')|list %}
+{% set current = queue|selectattr('status', 'equalto', '就诊中')|list %}
+{% set finished = queue|selectattr('status', 'equalto', '已诊')|list %}
+
+<div class="page-head">
+    <h1>{{ _('医生工作站') }}</h1>
+    <span class="desc">{{ doctor.dept_name }} · {{ doctor.name }} {{ doctor.title }} {{ _('· 诊室') }} {{ doctor.location }}</span>
+    {% if session.role == 'admin' %}
+    <div class="actions">
+        <form method="get"><select name="doctor_id" onchange="this.form.submit()">
+            {% for d in doctors %}<option value="{{ d.id }}" {% if d.id == doctor.id %}selected{% endif %}>{{ d.dept_name }} - {{ d.name }}</option>{% endfor %}
+        </select></form>
+    </div>
+    {% endif %}
+</div>
+
+<div class="queue-now">
+    <div>
+        <div style="opacity:.85">{{ _('候诊人数') }}</div>
+        <div class="no">{{ waiting|length }}</div>
+    </div>
+    <div style="border-left:1px solid rgba(255,255,255,.3);padding-left:20px">
+        {% if current %}
+        {{ _('正在就诊：') }}<b style="font-size:18px">{{ current[0].pname }}</b>{{ _('（{0} {1} 号）', _(current[0].period), current[0].queue_no) }}
+        <br><a href="{{ url_for('clinic_visit', rid=current[0].id) }}">{{ _('继续接诊 →') }}</a>
+        {% elif waiting %}
+        {{ _('下一位：') }}<b style="font-size:18px">{{ waiting[0].pname }}</b>{{ _('（{0} {1} 号）', _(waiting[0].period), waiting[0].queue_no) }}
+        {% else %}
+        {{ _('今日患者已全部看完') }}
+        {% endif %}
+        <br><small style="opacity:.8">{{ _('今日已诊 {0} 人', finished|length) }}</small>
+    </div>
+    <form method="post" action="{{ url_for('clinic_call_next') }}" style="margin-left:auto">
+        <input type="hidden" name="doctor_id" value="{{ doctor.id }}">
+        <button class="btn btn-lg" {% if not waiting %}disabled{% endif %}>{{ _('叫号：下一位') }}</button>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-head"><h3>{{ _('今日就诊队列') }}</h3><span class="muted">{{ _('按“就诊中 → 待诊 → 已诊”排序') }}</span></div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>{{ _('序号') }}</th><th>{{ _('患者') }}</th><th>{{ _('性别/年龄') }}</th><th>{{ _('医保') }}</th><th>{{ _('过敏史') }}</th><th>{{ _('挂号时间') }}</th><th>{{ _('状态') }}</th><th>{{ _('操作') }}</th></tr></thead>
+            <tbody>
+            {% for r in queue %}
+            <tr class="{% if r.status == '就诊中' %}row-current{% endif %}">
+                <td><b>{{ _(r.period) }} {{ r.queue_no }}</b></td>
+                <td><b>{{ r.pname }}</b><br><small>{{ r.card_no }}</small></td>
+                <td>{{ _(r.gender) }} / {{ r.birth|age }}</td>
+                <td><span class="tag">{{ _(r.insurance) }}</span></td>
+                <td>{% if r.allergy %}<span class="allergy-tag">{{ r.allergy }}</span>{% else %}<span class="muted">{{ _('无') }}</span>{% endif %}</td>
+                <td><small>{{ r.created_at[11:16] }}</small></td>
+                <td><span class="badge {{ STATUS_CLASS[r.status] }}">{{ _(r.status) }}</span></td>
+                <td>
+                    {% if r.status == '已诊' %}
+                    <a class="btn btn-sm btn-ghost" href="{{ url_for('clinic_visit', rid=r.id) }}">{{ _('查看病历') }}</a>
+                    {% else %}
+                    <a class="btn btn-sm" href="{{ url_for('clinic_visit', rid=r.id) }}">{{ _('继续接诊') if r.status == '就诊中' else _('接诊') }}</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="empty">{{ _('今日暂无挂号患者') }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

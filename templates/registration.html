@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+{% set active_menu = 'registration' %}
+{% block title %}{{ _('门诊挂号') }}{% endblock %}
+{% block heading %}{{ _('门诊挂号') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ _('门诊挂号') }}</h1>
+    <span class="desc">{{ _('支持当日挂号及 7 天内预约，每位医生每时段 20 个号源') }}</span>
+    <div class="actions"><a class="btn btn-outline" href="{{ url_for('patient_new', next='registration') }}">{{ _('＋ 新患者建档') }}</a></div>
+</div>
+
+{% if slip %}
+<div class="card slip" id="slip">
+    <div class="card-head">
+        <h3>{{ _('挂号凭条') }}</h3><span class="badge ok">{{ _('挂号成功') }}</span>
+        <div class="right no-print">
+            <button class="btn btn-sm btn-outline" onclick="window.print()">{{ _('打印凭条') }}</button>
+            <a class="btn btn-sm btn-ghost" href="{{ url_for('registration') }}">{{ _('关闭') }}</a>
+        </div>
+    </div>
+    <div class="grid grid-3">
+        <div><small>{{ _('排队序号') }}</small><div class="queue">{{ _('{0} {1} 号', _(slip.period), slip.queue_no) }}</div></div>
+        <dl class="kv">
+            <dt>{{ _('患者') }}</dt><dd>{{ slip.pname }}{{ _('（{0}）', slip.card_no) }}</dd>
+            <dt>{{ _('就诊科室') }}</dt><dd>{{ slip.dept_name }}</dd>
+            <dt>{{ _('医生') }}</dt><dd>{{ slip.dname }} {{ slip.title }}</dd>
+        </dl>
+        <dl class="kv">
+            <dt>{{ _('就诊日期') }}</dt><dd>{{ slip.visit_date }} {{ _(slip.period) }}</dd>
+            <dt>{{ _('就诊地点') }}</dt><dd><b>{{ slip.location }}</b></dd>
+            <dt>{{ _('挂号费') }}</dt><dd>{{ slip.fee|money }}&nbsp; <small>{{ slip.reg_no }}</small></dd>
+        </dl>
+    </div>
+    <p class="muted" style="margin-top:8px">{{ _('温馨提示：请提前 15 分钟到诊区候诊，过号需重新排队；未就诊可在当日到挂号窗口办理退号。') }}</p>
+</div>
+{% endif %}
+
+<div class="grid grid-side-l no-print">
+    <div class="card">
+        <div class="card-head"><h3>{{ _('① 填写挂号信息') }}</h3></div>
+        <form method="post" id="regForm" data-once>
+            <div class="field">
+                <label for="card">{{ _('就诊卡号') }}<span class="req">*</span></label>
+                <div class="input-clear">
+                    <input id="card" name="card" list="patientList" value="{{ form.card }}" placeholder="{{ _('输入卡号或姓名后从列表中选择') }}" required autocomplete="off" {% if not form.card %}autofocus{% endif %}>
+                    <button type="button" class="x" title="{{ _('清除') }}">×</button>
+                </div>
+                <datalist id="patientList">
+                    {% for p in all_patients %}<option value="{{ p.card_no }}">{{ p.name }} {{ _(p.gender) }} {{ p.birth|age }}</option>{% endfor %}
+                </datalist>
+                {% if recent_patients %}
+                <div style="margin-top:6px"><small>{{ _('最近挂号：') }}</small>
+                    {% for p in recent_patients %}<span class="chip" data-card="{{ p.card_no }}">{{ p.name }}</span>{% endfor %}
+                </div>
+                {% endif %}
+                <div class="preview-box" id="patientPreview"></div>
+            </div>
+
+            <div class="field" style="margin-top:12px">
+                <label for="dept">{{ _('就诊科室') }}<span class="req">*</span></label>
+                <select id="dept" required>
+                    <option value="">{{ _('请选择科室') }}</option>
+                    {% for d in depts %}<option value="{{ d.id }}">{{ d.name }}{{ _('（{0}）', d.location) }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="field" style="margin-top:12px">
+                <label for="doctor">{{ _('医生') }}<span class="req">*</span></label>
+                <select id="doctor" name="doctor_id" required disabled><option value="">{{ _('请先选择科室') }}</option></select>
+                <div class="hint" id="doctorInfo"></div>
+            </div>
+
+            <div class="form-grid" style="margin-top:12px">
+                <div class="field">
+                    <label for="visit_date">{{ _('就诊日期') }}<span class="req">*</span></label>
+                    <select id="visit_date" name="visit_date">
+                        {% for value, label in dates %}<option value="{{ value }}" {% if form.visit_date == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label>{{ _('时段') }}<span class="req">*</span></label>
+                    <div class="radio-group">
+                        {% for pd in ['上午', '下午'] %}
+                        <label><input type="radio" name="period" value="{{ pd }}" {% if form.period == pd %}checked{% endif %}><span>{{ _(pd) }}</span></label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="alert info" id="quotaBox" style="margin-top:12px;display:none"></div>
+
+            <div class="field" style="margin-top:12px">
+                <label>{{ _('挂号费支付方式') }}</label>
+                <div class="radio-group">
+                    {% for m in methods %}
+                    <label><input type="radio" name="method" value="{{ m }}" {% if form.method == m %}checked{% endif %}><span>{{ _(m) }}</span></label>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-lg" type="submit" id="submitBtn">{{ _('确认挂号') }} <span id="feeText"></span></button>
+                <button class="btn btn-ghost btn-lg" type="reset" id="resetBtn">{{ _('重填') }}</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <div class="card-head">
+            <h3>{{ _('② 今日挂号列表') }}</h3><span class="muted">{{ today_regs|length }} {{ _('条') }}</span>
+            <div class="right">
+                {% for s in ['', '待诊', '就诊中', '已诊', '已退号', '已过期'] %}
+                <a class="btn btn-sm {{ '' if status == s else 'btn-ghost' }}" href="{{ url_for('registration', status=s) }}">{{ _(s) if s else _('全部') }}</a>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>{{ _('挂号单号') }}</th><th>{{ _('患者') }}</th><th>{{ _('科室 / 医生') }}</th><th>{{ _('序号') }}</th><th class="num">{{ _('费用') }}</th><th>{{ _('状态') }}</th><th>{{ _('操作') }}</th></tr></thead>
+                <tbody>
+                {% for r in today_regs %}
+                <tr>
+                    <td><small>{{ r.reg_no }}</small></td>
+                    <td><b>{{ r.pname }}</b><br><small>{{ r.card_no }}</small></td>
+                    <td>{{ r.dept_name }}<br><small>{{ r.dname }} {{ r.title }}</small></td>
+                    <td>{{ _('{0} {1} 号', _(r.period), r.queue_no) }}</td>
+                    <td class="num">{{ r.fee|money }}</td>
+                    <td><span class="badge {{ STATUS_CLASS[r.status] }}">{{ _(r.status) }}</span></td>
+                    <td>
+                        {% if r.status == '待诊' %}
+                        <form method="post" action="{{ url_for('registration_cancel', rid=r.id) }}">
+                            <button class="btn btn-sm btn-ghost" data-danger
+                                    data-confirm="{{ _('确定为 {0} 办理退号吗？\n挂号费 ¥{1} 将原路退回，退号后不可恢复。', r.pname, '%.2f'|format(r.fee)) }}">{{ _('退号') }}</button>
+                        </form>
+                        {% else %}<span class="muted">—</span>{% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="empty">{{ _('暂无{0}记录', _(status)) if status else _('暂无记录') }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const doctors = {{ doctors|tojson }};
+    const deptSel = document.getElementById('dept');
+    const docSel = document.getElementById('doctor');
+    const docInfo = document.getElementById('doctorInfo');
+    const quotaBox = document.getElementById('quotaBox');
+    const feeText = document.getElementById('feeText');
+    const submitBtn = document.getElementById('submitBtn');
+    const card = document.getElementById('card');
+    const preview = document.getElementById('patientPreview');
+    const lastDoctor = {{ (form.doctor_id or '')|tojson }};
+    const today = {{ today|tojson }}, amClosed = {{ am_closed|tojson }};
+
+    // 今天已过中午时，上午号不可选（预防出错）
+    function checkPeriod() {
+        const am = document.querySelector('[name=period][value=上午]');
+        const closed = amClosed && document.getElementById('visit_date').value === today;
+        am.disabled = closed;
+        am.parentElement.title = closed ? t('今日上午门诊已结束') : '';
+        if (closed && am.checked) document.querySelector('[name=period][value=下午]').checked = true;
+    }
+
+    function fillDoctors() {
+        const list = doctors.filter(d => String(d.dept_id) === deptSel.value);
+        docSel.innerHTML = list.length ? '' : `<option value="">${t('请先选择科室')}</option>`;
+        list.forEach(d => docSel.add(new Option(t('{0}　{1}　挂号费 ¥{2}', d.name, d.title, d.reg_fee), d.id)));
+        docSel.disabled = !list.length;
+        updateQuota();
+    }
+
+    async function updateQuota() {
+        const d = doctors.find(x => String(x.id) === docSel.value);
+        if (!d) { docInfo.textContent = ''; quotaBox.style.display = 'none'; feeText.textContent = ''; return; }
+        docInfo.textContent = t('擅长：{0}', d.specialty);
+        feeText.textContent = t('（¥{0}）', d.reg_fee);
+        const period = document.querySelector('[name=period]:checked').value;
+        const date = document.getElementById('visit_date').value;
+        const q = await (await fetch(`/api/quota?doctor_id=${d.id}&date=${date}&period=${period}`)).json();
+        quotaBox.style.display = 'block';
+        quotaBox.className = 'alert ' + (q.remain > 0 ? (q.remain <= 5 ? 'warn' : 'ok') : 'danger');
+        quotaBox.textContent = q.remain > 0 ? t('{0} 医生 {1} 剩余号源 {2} / {3}', d.name, t(period), q.remain, q.total)
+                                       : t('{0} 医生 {1} 号源已满，请更换时段或医生', d.name, t(period));
+        submitBtn.disabled = q.remain <= 0;
+    }
+
+    deptSel.onchange = fillDoctors;
+    docSel.onchange = updateQuota;
+    document.getElementById('visit_date').onchange = () => { checkPeriod(); updateQuota(); };
+    document.querySelectorAll('[name=period]').forEach(r => r.onchange = updateQuota);
+    card.addEventListener('input', () => lookupPatient(card.value, preview));
+    document.querySelectorAll('[data-card]').forEach(c => c.onclick = () => { card.value = c.dataset.card; lookupPatient(card.value, preview); deptSel.focus(); });
+    document.getElementById('resetBtn').onclick = () => setTimeout(() => { fillDoctors(); checkPeriod(); lookupPatient('', preview); });
+
+    // 出错返回时恢复上次选择的医生（容错：不让用户重新填写）
+    if (lastDoctor) {
+        const d = doctors.find(x => String(x.id) === String(lastDoctor));
+        if (d) { deptSel.value = d.dept_id; fillDoctors(); docSel.value = d.id; updateQuota(); }
+    }
+    checkPeriod();
+    lookupPatient(card.value, preview);
+</script>
+{% endblock %}

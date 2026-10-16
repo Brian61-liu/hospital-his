@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% set active_menu = 'patients' %}
+{% block title %}{{ _('患者档案') }}{% endblock %}
+{% block heading %}{{ _('患者档案') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ _('患者档案') }}</h1>
+    <span class="desc">{% if is_doctor and scope == 'dept' %}{{ session.dept_name }}{{ _('就诊或收治过的患者，') }}{% endif %}{{ _('共') }} {{ patients|length }} {{ _('位') }}{% if q %}{{ _('，搜索“') }}{{ q }}{{ _('”的结果') }}{% endif %}</span>
+    <div class="actions">
+        <a class="btn" href="{{ url_for('patient_new') }}">{{ _('＋ 新建档案') }}</a>
+    </div>
+</div>
+
+{% if is_doctor %}
+<div class="tabs">
+    <a href="{{ url_for('patients', scope='dept', q=q) }}" class="{% if scope == 'dept' %}active{% endif %}">{{ _('本科室患者') }}</a>
+    <a href="{{ url_for('patients', scope='all', q=q) }}" class="{% if scope == 'all' %}active{% endif %}">{{ _('全院搜索') }}</a>
+</div>
+{% endif %}
+<div class="card">
+    <div class="card-head">
+        <form class="search-bar" method="get">
+            <input type="hidden" name="scope" value="{{ scope }}">
+            <div class="input-clear"><input name="q" value="{{ q }}" placeholder="{{ _('姓名 / 就诊卡号 / 手机号 / 身份证号') }}" autofocus>
+                <button type="button" class="x" title="{{ _('清除') }}">×</button></div>
+            <button class="btn">{{ _('搜索') }}</button>
+            {% if q %}<a class="btn btn-ghost" href="{{ url_for('patients', scope=scope) }}">{{ _('清除搜索') }}</a>{% endif %}
+        </form>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>{{ _('就诊卡号') }}</th><th>{{ _('姓名') }}</th><th>{{ _('性别/年龄') }}</th><th>{{ _('手机号') }}</th><th>{{ _('医保类型') }}</th><th>{{ _('过敏史') }}</th><th>{{ _('最近就诊') }}</th><th>{{ _('操作') }}</th></tr></thead>
+            <tbody>
+            {% for p in patients %}
+            <tr>
+                <td><b>{{ p.card_no }}</b></td>
+                <td><a href="{{ url_for('patient_detail', pid=p.id) }}">{{ p.name }}</a>
+                    {% if p.in_hospital %}<span class="badge info">{{ _('在院') }}</span>{% endif %}</td>
+                <td>{{ _(p.gender) }} / {{ p.birth|age }}</td>
+                <td>{{ p.phone[:3] }}****{{ p.phone[-4:] }}</td>
+                <td><span class="tag">{{ _(p.insurance) }}</span></td>
+                <td>{% if p.allergy %}<span class="allergy-tag">{{ p.allergy }}</span>{% else %}<span class="muted">{{ _('无') }}</span>{% endif %}</td>
+                <td>{{ p.last_visit or '—' }}</td>
+                <td>
+                    <a class="btn btn-sm btn-outline" href="{{ url_for('patient_detail', pid=p.id) }}">{{ _('详情') }}</a>
+                    <a class="btn btn-sm btn-ghost" href="{{ url_for('patient_edit', pid=p.id) }}">{{ _('编辑') }}</a>
+                    {% if session.role in ('admin', 'cashier') %}
+                    <a class="btn btn-sm" href="{{ url_for('registration', card=p.card_no) }}">{{ _('挂号') }}</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="empty">{{ _('没有找到匹配的患者。') }}
+                <a href="{{ url_for('patient_new') }}">{{ _('为新患者建档 →') }}</a></td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

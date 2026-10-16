@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% set active_menu = 'inpatient' %}
+{% block title %}{{ _('病区设置') }}{% endblock %}
+{% block heading %}{{ _('住院管理 / 病区设置') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ _('住院管理') }}</h1>
+    <span class="desc">{{ _('维护病区与床位信息，查看床位使用情况和转床记录') }}</span>
+    <div class="actions"><a class="btn" href="#newWard">{{ _('＋ 新增病区') }}</a></div>
+</div>
+{% with tab = 'wards' %}{% include '_inpatient_tabs.html' %}{% endwith %}
+
+<div class="grid grid-4">
+    <div class="card stat"><div class="stat-icon">{{ icon('building', 22) }}</div><div><div class="num">{{ wards|length }}</div><div class="label">{{ _('病区数') }}</div></div></div>
+    <div class="card stat"><div class="stat-icon">{{ icon('bed', 22) }}</div><div><div class="num">{{ totals.used }}/{{ totals.total }}</div><div class="label">{{ _('占用床位 / 总床位') }}</div></div></div>
+    <div class="card stat"><div class="stat-icon">{{ icon('activity', 22) }}</div><div><div class="num">{{ totals.rate }}%</div><div class="label">{{ _('床位使用率（不含停用）') }}</div></div></div>
+    <div class="card stat {% if totals.repair %}alert-stat{% endif %}"><div class="stat-icon">{{ icon('alert', 22) }}</div><div><div class="num">{{ totals.repair }}</div><div class="label">{{ _('维修中床位（停用 {0}）', totals.disabled) }}</div></div></div>
+</div>
+
+<div class="grid grid-3">
+    {% for w in wards %}
+    {% set usable = w.total - w.disabled %}
+    <div class="card ward-card">
+        <div class="card-head" style="margin-bottom:6px">
+            <h3>{{ w.name }}</h3><span class="tag">{{ _('床号前缀') }} {{ w.code }}</span>
+            <div class="right"><a class="btn btn-sm btn-outline" href="{{ url_for('ward_detail', wid=w.id) }}">{{ _('管理床位') }}</a></div>
+        </div>
+        <dl class="kv">
+            <dt>{{ _('所属科室') }}</dt><dd>{{ w.dept_name or '—' }}</dd>
+            <dt>{{ _('位置') }}</dt><dd>{{ w.location or '—' }}</dd>
+            <dt>{{ _('护士长') }}</dt><dd>{{ w.head_nurse or '—' }}&nbsp; <small>{{ w.phone }}</small></dd>
+            <dt>{{ _('床位费') }}</dt><dd>¥{{ '%.0f'|format(w.bed_fee) }}{{ _('/天') }}</dd>
+        </dl>
+        <div class="occupancy" title="{{ _('占用 {0}，维修 {1}，停用 {2}', w.used, w.repair, w.disabled) }}">
+            {% if w.total %}
+            <i class="o-used" style="width: {{ w.used / w.total * 100 }}%"></i>
+            <i class="o-repair" style="width: {{ w.repair / w.total * 100 }}%"></i>
+            <i class="o-off" style="width: {{ w.disabled / w.total * 100 }}%"></i>
+            {% endif %}
+        </div>
+        <small>{{ _('共') }} {{ w.total }} {{ _('床：占用') }} {{ w.used }} {{ _('· 空闲') }} {{ w.free }} {{ _('· 维修') }} {{ w.repair }} {{ _('· 停用') }} {{ w.disabled }}
+            {% if usable %}{{ _('· 使用率') }} {{ (w.used / usable * 100)|round|int }}%{% endif %}</small>
+    </div>
+    {% else %}
+    <div class="card empty">{{ _('尚未设置病区，请先新增病区') }}</div>
+    {% endfor %}
+</div>
+
+<div class="grid grid-side">
+    <div class="card">
+        <div class="card-head"><h3>{{ _('最近转床记录') }}</h3></div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>{{ _('时间') }}</th><th>{{ _('患者') }}</th><th>{{ _('原床位') }}</th><th>{{ _('新床位') }}</th><th>{{ _('原因') }}</th><th>{{ _('经办人') }}</th></tr></thead>
+                <tbody>
+                {% for t in transfers %}
+                <tr><td><small>{{ t.created_at[:16] }}</small></td><td><b>{{ t.pname }}</b></td>
+                    <td>{{ t.from_ward }} {{ t.from_no }}</td><td>{{ t.to_ward }} {{ t.to_no }}</td>
+                    <td>{{ t.reason }}</td><td>{{ t.operator }}</td></tr>
+                {% else %}
+                <tr><td colspan="6" class="empty">{{ _('暂无转床记录') }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card" id="newWard">
+        <div class="card-head"><h3>{{ _('新增病区') }}</h3></div>
+        <form method="post" action="{{ url_for('ward_new') }}" data-once>
+            <div class="form-grid">
+                <div class="field full"><label>{{ _('病区名称') }}<span class="req">*</span></label><input name="name" placeholder="{{ _('如：妇产科病区') }}" required></div>
+                <div class="field"><label>{{ _('床号前缀') }}<span class="req">*</span><span class="tip" title="{{ _('床号将自动生成为 前缀+序号，如 F01、F02') }}">?</span></label>
+                    <input name="code" maxlength="2" placeholder="{{ _('如 F') }}" required style="text-transform:uppercase"></div>
+                <div class="field"><label>{{ _('所属科室') }}</label>
+                    <select name="dept_id">{% for d in depts %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}</select></div>
+                <div class="field"><label>{{ _('位置') }}</label><input name="location" placeholder="{{ _('如 住院楼8层') }}"></div>
+                <div class="field"><label>{{ _('护士长') }}</label><input name="head_nurse"></div>
+                <div class="field"><label>{{ _('联系电话') }}</label><input name="phone" placeholder="0411-88881801"></div>
+                <div class="field"><label>{{ _('床位费（元/天）') }}<span class="req">*</span></label><input name="bed_fee" type="number" min="1" step="1" value="60" required></div>
+                <div class="field full"><label>{{ _('初始床位数') }}</label><input name="count" type="number" min="0" max="50" value="8">
+                    <div class="hint">{{ _('创建后也可以在病区详情中继续增加床位') }}</div></div>
+            </div>
+            <div class="form-actions"><button class="btn">{{ _('创建病区') }}</button></div>
+        </form>
+    </div>
+</div>
+{% endblock %}

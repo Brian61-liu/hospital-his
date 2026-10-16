@@ -1,0 +1,263 @@
+{% extends 'base.html' %}
+{% set active_menu = 'clinic' %}
+{% block title %}{{ _('接诊 - {0}', p.name) }}{% endblock %}
+{% block heading %}{{ _('医生工作站 / 接诊 {0}', p.name) }}{% endblock %}
+{% block content %}
+{% set steps = ['挂号', '候诊', '就诊中', '已诊', '缴费', '取药'] %}
+{% if reg.status == '就诊中' %}{% set cur = 2 %}
+{% elif not rx %}{% set cur = 6 %}
+{% elif rx.status == '待缴费' %}{% set cur = 4 %}
+{% elif rx.status == '已缴费' %}{% set cur = 5 %}
+{% else %}{% set cur = 6 %}{% endif %}
+
+<div class="page-head">
+    <a class="btn btn-ghost" href="{{ url_for('clinic', doctor_id=reg.doctor_id) }}">{{ _('← 返回队列') }}</a>
+    <h1>{{ _('接诊') if reg.status == '就诊中' else _('门诊病历') }}</h1>
+    <span class="badge {{ STATUS_CLASS[reg.status] }}">{{ _(reg.status) }}</span>
+    <span class="desc">{{ reg.reg_no }} · {{ reg.visit_date }} {{ _('{0} {1} 号', _(reg.period), reg.queue_no) }}</span>
+    {% if reg.status == '已诊' %}<div class="actions"><button class="btn btn-outline" onclick="window.print()">{{ _('打印病历 / 处方') }}</button></div>{% endif %}
+</div>
+<div class="print-only print-head">
+    <h2>{{ _('门诊病历') }}</h2>
+    <p>{{ _('姓名：') }}{{ p.name }} &nbsp; {{ _('性别：') }}{{ _(p.gender) }} &nbsp; {{ _('年龄：') }}{{ p.birth|age }} &nbsp; {{ _('就诊卡号：') }}{{ p.card_no }} &nbsp; {{ _('医保：') }}{{ _(p.insurance) }}</p>
+    <p>{{ _('科室：') }}{{ reg.dept_name }} &nbsp; {{ _('医生：') }}{{ reg.dname }} &nbsp; {{ _('就诊日期：') }}{{ reg.visit_date }} {{ _(reg.period) }} &nbsp; {{ _('过敏史：') }}{{ p.allergy or _('无') }}</p>
+</div>
+
+<div class="card no-print">
+    <div class="steps">
+        {% for s in steps %}
+        <div class="s {% if loop.index0 < cur %}done{% elif loop.index0 == cur %}now{% endif %}" data-n="{{ loop.index }}">{{ _(s) }}</div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="grid grid-side-l">
+    <div class="no-print">
+        <div class="card">
+            <div class="patient-card" style="margin-bottom:14px">
+                <div class="avatar-lg">{{ p.name[0] }}</div>
+                <div><div class="name">{{ p.name }}</div><span class="muted">{{ _(p.gender) }} · {{ p.birth|age }} · {{ p.card_no }}</span></div>
+            </div>
+            {% if p.allergy %}
+            <div class="alert danger"><b>{{ _('药物过敏史：') }}{{ p.allergy }}</b><br><small>{{ _('开具相关药品时系统将自动拦截提醒') }}</small></div>
+            {% else %}
+            <div class="alert ok">{{ _('无药物过敏史') }}</div>
+            {% endif %}
+            <dl class="kv">
+                <dt>{{ _('医保类型') }}</dt><dd>{{ _(p.insurance) }}</dd>
+                <dt>{{ _('联系电话') }}</dt><dd>{{ p.phone }}</dd>
+                <dt>{{ _('就诊科室') }}</dt><dd>{{ reg.dept_name }} · {{ reg.dname }}</dd>
+            </dl>
+        </div>
+        <div class="card">
+            <div class="card-head"><h3>{{ _('历史就诊') }}</h3><span class="muted">{{ _('最近 5 次') }}</span></div>
+            {% for h in history %}
+            <div style="padding:8px 0;border-bottom:1px solid var(--line)">
+                <b>{{ h.visit_date }}</b> <small>{{ h.dept_name }} {{ h.dname }}</small><br>
+                {{ _('诊断：') }}<b>{{ h.diagnosis or '—' }}</b><br>
+                <small>{{ _('主诉：') }}{{ h.complaint or '—' }}{{ _('；医嘱：') }}{{ h.advice or '—' }}</small>
+                {% if reg.status == '就诊中' and h.diagnosis %}<br><span class="chip" data-diag="{{ h.diagnosis }}">{{ _('引用此诊断') }}</span>{% endif %}
+            </div>
+            {% else %}<div class="empty">{{ _('首次就诊，无历史记录') }}</div>{% endfor %}
+        </div>
+    </div>
+
+    <div>
+    {% if reg.status == '就诊中' %}
+        <form method="post" id="visitForm">
+            <div class="card">
+                <div class="card-head"><h3>{{ _('电子病历') }}</h3><span class="muted">{{ _('带 * 为完成就诊必填') }}</span></div>
+                <div class="form-grid">
+                    <div class="field full"><label for="complaint">{{ _('主诉') }}</label>
+                        <input id="complaint" name="complaint" value="{{ form.get('complaint') or '' }}" placeholder="{{ _('患者主要症状及持续时间，如：发热、咳嗽2天') }}" autofocus></div>
+                    <div class="field full"><label for="history">{{ _('现病史 / 检查') }}</label>
+                        <textarea id="history" name="history" placeholder="{{ _('起病情况、伴随症状、体格检查结果等') }}">{{ form.get('history') or '' }}</textarea></div>
+                    <div class="field"><label for="diagnosis">{{ _('诊断') }}<span class="req">*</span></label>
+                        <div class="input-clear"><input id="diagnosis" name="diagnosis" list="diagList" value="{{ form.get('diagnosis') or '' }}" placeholder="{{ _('输入或选择常见诊断') }}">
+                            <button type="button" class="x" title="{{ _('清除') }}">×</button></div>
+                        <datalist id="diagList">{% for d in diagnoses %}<option value="{{ d }}">{% endfor %}</datalist>
+                    </div>
+                    <div class="field"><label for="advice">{{ _('医嘱') }}</label>
+                        <input id="advice" name="advice" value="{{ form.get('advice') or '' }}" placeholder="{{ _('如：多饮水，3天后复诊') }}"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-head"><h3>{{ _('处方') }}</h3><span class="muted">{{ _('不需要用药可不添加') }}</span>
+                    <div class="right"><button type="button" class="btn btn-sm btn-outline" id="addRow">{{ _('＋ 添加药品') }}</button></div>
+                </div>
+                <div class="table-wrap">
+                    <table class="rx-table">
+                        <thead><tr><th style="width:34%">{{ _('药品') }}</th><th style="width:12%">{{ _('数量') }}</th><th>{{ _('用法用量') }}</th><th class="num">{{ _('小计') }}</th><th></th></tr></thead>
+                        <tbody id="rxBody"></tbody>
+                    </table>
+                </div>
+                <div class="empty" id="rxEmpty">{{ _('尚未添加药品，点击右上角“添加药品”') }}</div>
+                <div class="alert danger" id="allergyAlert" style="display:none;margin-top:10px"></div>
+                <label id="allergyConfirm" style="display:none;margin-top:6px">
+                    <input type="checkbox" name="allergy_confirm" value="1" style="width:auto"> {{ _('已评估过敏风险（如已做皮试且结果阴性），坚持开具') }}
+                </label>
+                <div class="rx-total">{{ _('处方合计：') }}<b id="rxTotal">¥0.00</b></div>
+                <datalist id="usageList">{% for u in usages %}<option value="{{ u }}">{% endfor %}</datalist>
+            </div>
+
+            <div class="card form-actions" style="justify-content:flex-end">
+                <span class="muted" style="margin-right:auto">{{ _('暂存会保存病历和处方草稿；完成就诊后处方发送至收费处，不能再修改') }}</span>
+                <a class="btn btn-ghost btn-lg" href="{{ url_for('clinic', doctor_id=reg.doctor_id) }}">{{ _('稍后处理') }}</a>
+                <button class="btn btn-ghost btn-lg" name="action" value="suspend" formnovalidate
+                        data-confirm="{{ _('患者暂时离开（如去做检查）？\n病历和处方草稿会保存，患者回到候诊队列，返回后可重新接诊。') }}">{{ _('患者暂离') }}</button>
+                <button class="btn btn-outline btn-lg" name="action" value="save">{{ _('暂存病历') }}</button>
+                {% if not in_hospital and not (adm_request and adm_request.status == '待安排') %}
+                <button type="button" class="btn btn-outline btn-lg" data-admit-toggle>{{ _('开住院证') }}</button>
+                {% endif %}
+                <button class="btn btn-lg" name="action" value="finish"
+                        data-confirm="{{ _('确认完成本次就诊？\n完成后病历和处方将锁定，处方会推送到收费处。') }}">{{ _('完成就诊') }}</button>
+            </div>
+        </form>
+    {% else %}
+        <div class="card">
+            <div class="card-head"><h3>{{ _('电子病历') }}</h3><span class="muted">{{ _('更新于') }} {{ form.get('updated_at') or '—' }}</span></div>
+            <dl class="kv" style="grid-template-columns:110px 1fr">
+                <dt>{{ _('主诉') }}</dt><dd>{{ form.get('complaint') or '—' }}</dd>
+                <dt>{{ _('现病史/检查') }}</dt><dd>{{ form.get('history') or '—' }}</dd>
+                <dt>{{ _('诊断') }}</dt><dd><b>{{ form.get('diagnosis') or '—' }}</b></dd>
+                <dt>{{ _('医嘱') }}</dt><dd>{{ form.get('advice') or '—' }}</dd>
+            </dl>
+        </div>
+        <div class="card">
+            <div class="card-head"><h3>{{ _('处方') }}</h3>
+                {% if rx %}<span class="badge {{ STATUS_CLASS[rx.status] }}">{{ _(rx.status) }}</span><small>{{ rx.rx_no }}</small>{% endif %}</div>
+            {% if rx %}
+            <table>
+                <thead><tr><th>{{ _('药品') }}</th><th>{{ _('规格') }}</th><th class="num">{{ _('数量') }}</th><th>{{ _('用法用量') }}</th><th class="num">{{ _('小计') }}</th></tr></thead>
+                <tbody>
+                {% for it in rx_items %}
+                <tr><td>{{ it.name }}</td><td>{{ it.spec }}</td><td class="num">{{ it.qty }} {{ it.unit }}</td><td>{{ it.usage }}</td><td class="num">{{ (it.qty * it.price)|money }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            <div class="rx-total">{{ _('处方合计：') }}<b>{{ rx.total|money }}</b></div>
+            {% else %}<div class="empty">{{ _('本次就诊未开处方') }}</div>{% endif %}
+        </div>
+    {% endif %}
+    {% set can_request = not in_hospital and not (adm_request and adm_request.status == '待安排') %}
+    <div class="card no-print" id="admitCard">
+        <div class="card-head"><h3>{{ _('住院证') }}</h3>
+            {% if adm_request %}<span class="badge {{ STATUS_CLASS[adm_request.status] }}">{{ _(adm_request.status) }}</span><small>{{ adm_request.req_no }}</small>{% endif %}
+        </div>
+        {% if in_hospital %}
+        <p>{{ _('患者目前在院：') }}<b>{{ in_hospital.ward }} {{ in_hospital.bed_no }}</b>{{ _('，{0} 入院（{1}）', in_hospital.admit_date, in_hospital.diagnosis) }}</p>
+        {% elif adm_request and adm_request.status == '待安排' %}
+        <dl class="kv">
+            <dt>{{ _('入院诊断') }}</dt><dd><b>{{ adm_request.diagnosis }}</b></dd>
+            <dt>{{ _('病情说明') }}</dt><dd>{{ adm_request.note or '—' }}</dd>
+            <dt>{{ _('开具时间') }}</dt><dd>{{ adm_request.created_at }}</dd>
+        </dl>
+        <p class="muted" style="margin:8px 0">{{ _('已通知病区护士，等待安排床位并办理入院。') }}</p>
+        <form method="post" action="{{ url_for('admission_request_cancel', qid=adm_request.id) }}">
+            <input type="hidden" name="back" value="{{ url_for('clinic_visit', rid=reg.id) }}">
+            <button class="btn btn-danger btn-sm" data-danger data-confirm="{{ _('确定撤销 {0} 的住院申请吗？', p.name) }}">{{ _('撤销申请') }}</button>
+        </form>
+        {% else %}
+        <p class="muted" id="admitHint">{{ _('患者需要住院治疗时开具住院证，由病区护士安排床位并办理入院手续。') }}</p>
+        <form method="post" action="{{ url_for('admission_request_new', rid=reg.id) }}" id="admitForm" style="display:none;margin-top:10px" data-once>
+            <div class="form-grid">
+                <div class="field"><label for="admitDiag">{{ _('入院诊断') }}<span class="req">*</span></label>
+                    <input id="admitDiag" name="diagnosis" value="{{ form.get('diagnosis') or '' }}" placeholder="{{ _('如：社区获得性肺炎') }}" required></div>
+                <div class="field"><label for="admitNote">{{ _('病情说明 / 床位要求') }}</label>
+                    <input id="admitNote" name="note" placeholder="{{ _('如：需吸氧，建议靠近护士站') }}"></div>
+            </div>
+            <div class="form-actions">
+                <button class="btn" data-confirm="{{ _('确定为 {0} 开具住院证吗？\n提交后病区护士会收到入院提醒。', p.name) }}">{{ _('提交住院证') }}</button>
+                <button type="button" class="btn btn-ghost" data-admit-toggle>{{ _('取消') }}</button>
+            </div>
+        </form>
+        <button type="button" class="btn btn-outline" id="admitOpen" data-admit-toggle style="margin-top:6px">{{ _('开具住院证') }}</button>
+        {% endif %}
+    </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 展开 / 收起住院证表单，并带入病历中已填写的诊断
+    document.querySelectorAll('[data-admit-toggle]').forEach(btn => btn.addEventListener('click', () => {
+        const form = document.getElementById('admitForm');
+        if (!form) return;
+        const show = form.style.display === 'none';
+        form.style.display = show ? 'block' : 'none';
+        document.getElementById('admitOpen').style.display = show ? 'none' : 'inline-flex';
+        if (show) {
+            const diag = document.getElementById('diagnosis'), target = document.getElementById('admitDiag');
+            if (diag && diag.value.trim()) target.value = diag.value.trim();
+            document.getElementById('admitCard').scrollIntoView({behavior: 'smooth', block: 'center'});
+            target.focus();
+        }
+    }));
+</script>
+{% if reg.status == '就诊中' %}
+<script>
+    const drugs = {{ drugs|tojson }};
+    const allergy = {{ (p.allergy or '')|tojson }};
+    const initItems = {{ items|tojson }};
+    const body = document.getElementById('rxBody');
+
+    function drugOptions(selected) {
+        return `<option value="">${t('— 选择药品 —')}</option>` + drugs.map(d =>
+            `<option value="${d.id}" ${String(d.id) === String(selected) ? 'selected' : ''} ${d.stock <= 0 ? 'disabled' : ''}>` +
+            esc(t('{0} {1}｜¥{2}/{3}｜库存{4}', d.name, d.spec, d.price, d.unit, d.stock)) + (d.allergen && allergy.includes(d.allergen) ? ' ' + t('[过敏风险]') : '') + '</option>').join('');
+    }
+
+    function addRow(item = {}) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><select name="drug_id">${drugOptions(item.drug_id)}</select></td>
+            <td><input name="qty" type="number" min="1" value="${esc(item.qty || 1)}"></td>
+            <td><input name="usage" list="usageList" value="${esc(item.usage)}" placeholder="${t('如：口服 一日3次 每次1粒')}"></td>
+            <td class="num sub">¥0.00</td>
+            <td><button type="button" class="btn btn-sm btn-ghost del" title="${t('删除此药品')}">${t('删除')}</button></td>`;
+        tr.querySelector('.del').onclick = () => { tr.remove(); refresh(); };
+        tr.querySelectorAll('select, input').forEach(el => el.addEventListener('input', refresh));
+        body.appendChild(tr);
+        refresh();
+        return tr;
+    }
+
+    // 实时计算金额，并提示库存不足、过敏风险（预防出错）
+    function refresh() {
+        let total = 0;
+        const risky = [];
+        body.querySelectorAll('tr').forEach(tr => {
+            const d = drugs.find(x => String(x.id) === tr.querySelector('select').value);
+            const qty = parseInt(tr.querySelector('[name=qty]').value) || 0;
+            const sub = d ? d.price * qty : 0;
+            total += sub;
+            tr.querySelector('.sub').textContent = '¥' + sub.toFixed(2);
+            const isRisky = d && d.allergen && allergy.includes(d.allergen);
+            if (isRisky) risky.push(d.name);
+            const overStock = d && qty > d.stock;
+            tr.classList.toggle('row-alert', !!(isRisky || overStock));
+            tr.querySelector('[name=qty]').title = overStock ? t('库存仅剩 {0}', d.stock) : '';
+            if (d && !tr.querySelector('[name=usage]').value) {
+                tr.querySelector('[name=usage]').placeholder = t('请填写用法用量');
+            }
+        });
+        document.getElementById('rxTotal').textContent = '¥' + total.toFixed(2);
+        document.getElementById('rxEmpty').style.display = body.children.length ? 'none' : 'block';
+        const alertBox = document.getElementById('allergyAlert');
+        alertBox.style.display = risky.length ? 'block' : 'none';
+        document.getElementById('allergyConfirm').style.display = risky.length ? 'block' : 'none';
+        alertBox.textContent = t('过敏警告：患者对【{0}】过敏，{1} 可能引起过敏反应，请更换药品或确认后开具。', allergy, risky.join(t('、')));
+    }
+
+    document.getElementById('addRow').onclick = () => addRow().querySelector('select').focus();
+    document.querySelectorAll('[data-diag]').forEach(c => c.onclick = () => { document.getElementById('diagnosis').value = c.dataset.diag; });
+    initItems.forEach(addRow);
+    if (initItems.some(i => i.drug_id) && {{ 'true' if form.get('allergy_confirm') else 'false' }}) {
+        document.querySelector('[name=allergy_confirm]').checked = true;
+    }
+    refresh();
+</script>
+{% endif %}
+{% endblock %}

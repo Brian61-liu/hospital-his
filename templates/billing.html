@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+{% set active_menu = 'billing' %}
+{% block title %}{{ _('收费结算') }}{% endblock %}
+{% block heading %}{{ _('收费结算') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ _('收费结算') }}</h1>
+    <span class="desc">{{ _('医生完成就诊后处方自动推送至此；医保结算：职工医保统筹 {0}%，居民医保统筹 {1}%', (ratio['城镇职工医保'] * 100)|int, (ratio['城乡居民医保'] * 100)|int) }}</span>
+</div>
+
+<div class="tabs">
+    <a href="{{ url_for('billing') }}" class="{% if tab != 'paid' %}active{% endif %}">{{ _('待缴费') }} {% if pending %}<span class="badge danger">{{ pending|length }}</span>{% endif %}</a>
+    <a href="{{ url_for('billing', tab='paid') }}" class="{% if tab == 'paid' %}active{% endif %}">{{ _('已缴费未取药（可退费）') }}{% if paid %} <span class="badge info">{{ paid|length }}</span>{% endif %}</a>
+</div>
+
+<div class="grid grid-side">
+    {% if tab == 'paid' %}
+    <div class="card">
+        <div class="card-head"><h3>{{ _('已缴费、尚未取药的处方') }}</h3><span class="muted">{{ _('患者不需要药品时可办理退费；药品已发出的需先到药房退药') }}</span></div>
+        {% for rx in paid %}
+        <div class="sub-card">
+            <div class="card-head" style="margin-bottom:8px">
+                <b style="font-size:16px">{{ rx.pname }}</b>
+                <small>{{ rx.card_no }} · {{ _(rx.gender) }} {{ rx.birth|age }}</small>
+                <div class="right"><small>{{ rx.rx_no }} · {{ rx.dept_name }} {{ rx.dname }} {{ _('· 缴费') }} {{ rx.paid_at[5:16] }}</small></div>
+            </div>
+            <small class="muted">{% for it in items[rx.id] %}{{ it.name }} ×{{ it.qty }}{% if not loop.last %}{{ _('、') }}{% endif %}{% endfor %}</small>
+            <form method="post" action="{{ url_for('billing_refund', rx_id=rx.id) }}" class="form-actions" style="margin-top:8px;justify-content:flex-end">
+                <span style="margin-right:auto">{{ _('处方金额') }} <b>{{ rx.total|money }}</b></span>
+                <button class="btn btn-danger" data-danger data-confirm="{{ _('确定为 {0} 办理退费吗？\n费用将按原支付方式退回，处方作废后药房不能再发药。', rx.pname) }}">{{ _('办理退费') }}</button>
+            </form>
+        </div>
+        {% else %}
+        <div class="empty">{{ _('没有可退费的处方') }}</div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card">
+        <div class="card-head">
+            <h3>{{ _('待缴费处方') }}</h3><span class="badge danger">{{ pending|length }}</span>
+            <form class="search-bar right" method="get">
+                <div class="input-clear"><input name="q" value="{{ q }}" placeholder="{{ _('就诊卡号 / 姓名') }}">
+                    <button type="button" class="x" title="{{ _('清除') }}">×</button></div>
+                <button class="btn">{{ _('查询') }}</button>
+            </form>
+        </div>
+        {% for rx in pending %}
+        <div class="sub-card">
+            <div class="card-head" style="margin-bottom:8px">
+                <b style="font-size:16px">{{ rx.pname }}</b>
+                <small>{{ rx.card_no }} · {{ _(rx.gender) }} {{ rx.birth|age }}</small>
+                <span class="tag">{{ _(rx.insurance) }}</span>
+                <div class="right"><small>{{ rx.rx_no }} · {{ rx.dept_name }} {{ rx.dname }} {{ _('· 诊断：') }}{{ rx.diagnosis }}</small></div>
+            </div>
+            <table>
+                <thead><tr><th>{{ _('药品') }}</th><th>{{ _('规格') }}</th><th class="num">{{ _('单价') }}</th><th class="num">{{ _('数量') }}</th><th class="num">{{ _('金额') }}</th></tr></thead>
+                <tbody>
+                {% for it in items[rx.id] %}
+                <tr><td>{{ it.name }}</td><td>{{ it.spec }}</td><td class="num">{{ it.price|money }}</td><td class="num">{{ it.qty }} {{ it.unit }}</td><td class="num">{{ (it.price * it.qty)|money }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% set r = ratio.get(rx.insurance, 0) %}
+            <form method="post" action="{{ url_for('billing_pay', rx_id=rx.id) }}" class="pay-form" data-total="{{ rx.total }}" data-ratio="{{ r }}" style="margin-top:12px">
+                <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+                    <div class="radio-group">
+                        {% for m in methods %}
+                        <label><input type="radio" name="method" value="{{ m }}" required
+                                      {% if m == '医保结算' and r == 0 %}disabled{% endif %}
+                                      {% if (m == '医保结算' and r > 0) or (m == '微信' and r == 0) %}checked{% endif %}><span>{{ _(m) }}</span></label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:flex-end;gap:18px;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)">
+                    <span>{{ _('总金额') }} <b>{{ rx.total|money }}</b></span>
+                    <span>{{ _('医保统筹') }} <b class="ins">¥0.00</b></span>
+                    <span>{{ _('个人应付') }} <b class="personal" style="font-size:20px">{{ rx.total|money }}</b></span>
+                    <button class="btn btn-lg" data-confirm="{{ _('确认向 {0} 收取处方费用吗？', rx.pname) }}">{{ _('收费') }}</button>
+                </div>
+            </form>
+        </div>
+        {% else %}
+        <div class="empty">{{ _('当前没有待缴费的处方') }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div>
+        <div class="card">
+            <div class="card-head"><h3>{{ _('今日收款汇总') }}</h3></div>
+            {% for s in summary %}
+            <div class="bar-row" style="grid-template-columns:80px 1fr auto"><span>{{ _(s.method) }}</span><small class="muted">{{ s.n }} {{ _('笔') }}</small><b>{{ s.total|money }}</b></div>
+            {% else %}<div class="empty">{{ _('今日暂无收款') }}</div>{% endfor %}
+            <hr style="border:0;border-top:1px solid var(--line);margin:10px 0">
+            <div class="bar-row" style="grid-template-columns:80px 1fr auto"><span>{{ _('个人实收') }}</span><span></span><b style="color:var(--primary-dark)">{{ summary|sum(attribute='total')|money }}</b></div>
+            <div class="bar-row" style="grid-template-columns:80px 1fr auto"><span>{{ _('医保统筹') }}</span><span></span><b>{{ insurance_total|money }}</b></div>
+        </div>
+        <div class="card">
+            <div class="card-head"><h3>{{ _('今日收费流水') }}</h3><span class="muted">{{ flow|length }} {{ _('笔') }}</span></div>
+            <div class="table-wrap" style="max-height:480px;overflow-y:auto">
+                <table>
+                    <thead><tr><th>{{ _('时间') }}</th><th>{{ _('患者/项目') }}</th><th class="num">{{ _('金额') }}</th></tr></thead>
+                    <tbody>
+                    {% for f in flow %}
+                    <tr><td><small>{{ f.created_at[11:16] }}</small></td>
+                        <td>{{ f.pname }}<br><small>{{ f.item }} · {{ _(f.method) }}</small></td>
+                        <td class="num" style="color:{{ 'var(--ok)' if f.amount < 0 else 'inherit' }}">{{ f.amount|money }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 根据支付方式实时计算医保与个人支付金额（状态可见）
+    document.querySelectorAll('.pay-form').forEach(f => {
+        const total = parseFloat(f.dataset.total), ratio = parseFloat(f.dataset.ratio);
+        const update = () => {
+            const m = f.querySelector('[name=method]:checked');
+            const ins = m && m.value === '医保结算' ? Math.round(total * ratio * 100) / 100 : 0;
+            f.querySelector('.ins').textContent = '¥' + ins.toFixed(2);
+            f.querySelector('.personal').textContent = '¥' + (total - ins).toFixed(2);
+        };
+        f.querySelectorAll('[name=method]').forEach(r => r.onchange = update);
+        update();
+    });
+</script>
+{% endblock %}

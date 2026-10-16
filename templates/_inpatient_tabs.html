@@ -1,0 +1,7 @@
+{# 住院管理的标签页：病区设置仅护士/管理员可见 #}
+{% if session.role in ('admin', 'nurse') %}
+<div class="tabs">
+    <a href="{{ url_for('inpatient') }}" class="{% if tab == 'beds' %}active{% endif %}">{{ _('住院床位') }}</a>
+    <a href="{{ url_for('wards') }}" class="{% if tab == 'wards' %}active{% endif %}">{{ _('病区设置') }}</a>
+</div>
+{% endif %}

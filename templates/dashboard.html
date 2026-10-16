@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+{% set active_menu = 'dashboard' %}
+{% set role = session.role %}
+{% block title %}{{ _('工作台') }}{% endblock %}
+{% block heading %}{{ _('工作台') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ _('{0}，上午好', session.name) if now_hour < 12 else _('{0}，下午好', session.name) }}</h1>
+    <span class="desc">{{ _('今天是 {0}，以下是{1}', today_text, desc) }}</span>
+</div>
+
+<div class="grid grid-4">
+    {% for ic, value, label, warn in cards %}
+    <div class="card stat {% if warn %}alert-stat{% endif %}">
+        <div class="stat-icon">{{ icon(ic, 22) }}</div>
+        <div><div class="num">{{ value }}</div><div class="label">{{ label }}</div></div>
+    </div>
+    {% endfor %}
+</div>
+
+{% macro quick_card() %}
+<div class="card">
+    <div class="card-head"><h3>{{ _('快捷入口') }}</h3></div>
+    <div class="quick">
+        {% for ep, label, ic, roles in menu if ep != 'dashboard' %}
+        <a href="{{ url_for(ep) }}">{{ icon(ic, 20) }}{{ _(label) }}</a>
+        {% endfor %}
+    </div>
+</div>
+{% endmacro %}
+
+{% macro low_stock_card() %}
+<div class="card">
+    <div class="card-head"><h3 class="text-danger">{{ _('药品库存预警') }}</h3><span class="muted">{{ _('库存低于预警线，请及时补货') }}</span>
+        <div class="right"><a class="btn btn-sm btn-outline" href="{{ url_for('pharmacy', tab='stock') }}">{{ _('去入库') }}</a></div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>{{ _('编码') }}</th><th>{{ _('药品名称') }}</th><th>{{ _('规格') }}</th><th class="num">{{ _('当前库存') }}</th><th class="num">{{ _('预警线') }}</th></tr></thead>
+            <tbody>
+            {% for d in low_drugs %}
+            <tr class="row-warn"><td>{{ d.code }}</td><td>{{ d.name }}</td><td>{{ d.spec }}</td>
+                <td class="num"><b class="text-danger">{{ d.stock }}</b> {{ d.unit }}</td><td class="num">{{ d.warn_level }}</td></tr>
+            {% else %}
+            <tr><td colspan="5" class="empty">{{ _('所有药品库存充足') }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endmacro %}
+
+{% if role in ('admin', 'cashier') %}
+<div class="grid grid-side">
+    <div class="card">
+        <div class="card-head"><h3>{{ _('今日最新挂号') }}</h3>
+            <div class="right"><a href="{{ url_for('registration') }}">{{ _('查看全部 →') }}</a></div>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>{{ _('挂号单号') }}</th><th>{{ _('患者') }}</th><th>{{ _('科室') }}</th><th>{{ _('医生') }}</th><th>{{ _('时段/序号') }}</th><th>{{ _('状态') }}</th></tr></thead>
+                <tbody>
+                {% for r in recent %}
+                <tr>
+                    <td>{{ r.reg_no }}</td>
+                    <td>{{ r.pname }} <small>{{ _(r.gender) }} {{ r.birth|age }}</small></td>
+                    <td>{{ r.dept_name }}</td>
+                    <td>{{ r.dname }}</td>
+                    <td>{{ _('{0} {1} 号', _(r.period), r.queue_no) }}</td>
+                    <td><span class="badge {{ STATUS_CLASS[r.status] }}">{{ _(r.status) }}</span></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="empty">{{ _('今天还没有挂号记录') }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div>
+        {{ quick_card() }}
+        <div class="card">
+            <div class="card-head"><h3>{{ _('今日科室就诊量') }}</h3></div>
+            {% for d in dept_load %}
+            <div class="bar-row">
+                <span>{{ d.name }}</span>
+                <div class="bar" title="{{ d.location }}"><i style="width: {{ (d.n / max_load * 100)|round }}%"></i></div>
+                <b>{{ d.n }}</b>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% if role == 'admin' %}{{ low_stock_card() }}{% endif %}
+
+{% elif role == 'pharmacist' %}
+<div class="grid grid-side">
+    <div>
+        <div class="card">
+            <div class="card-head"><h3>{{ _('待发药处方') }}</h3><span class="muted">{{ _('按缴费先后排序') }}</span>
+                <div class="right"><a href="{{ url_for('pharmacy') }}">{{ _('去发药 →') }}</a></div></div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>{{ _('处方号') }}</th><th>{{ _('患者') }}</th><th>{{ _('科室 / 医生') }}</th><th>{{ _('诊断') }}</th><th>{{ _('缴费时间') }}</th></tr></thead>
+                    <tbody>
+                    {% for rx in to_dispense %}
+                    <tr><td><small>{{ rx.rx_no }}</small></td><td><b>{{ rx.pname }}</b> <small>{{ _(rx.gender) }} {{ rx.birth|age }}</small></td>
+                        <td>{{ rx.dept_name }} · {{ rx.dname }}</td><td>{{ rx.diagnosis }}</td><td>{{ rx.paid_at[11:16] }}</td></tr>
+                    {% else %}
+                    <tr><td colspan="5" class="empty">{{ _('没有待发药的处方') }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {{ low_stock_card() }}
+    </div>
+    <div>{{ quick_card() }}</div>
+</div>
+
+{% elif role == 'nurse' %}
+<div class="grid grid-side">
+    <div>
+        <div class="card">
+            <div class="card-head"><h3>{{ _('待入院申请') }}</h3>
+                <div class="right"><a href="{{ url_for('inpatient') }}">{{ _('去安排床位 →') }}</a></div></div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>{{ _('患者') }}</th><th>{{ _('入院诊断') }}</th><th>{{ _('开具医生') }}</th><th>{{ _('开具时间') }}</th><th></th></tr></thead>
+                    <tbody>
+                    {% for q in pending_req %}
+                    <tr><td><b>{{ q.pname }}</b> <small>{{ _(q.gender) }} {{ q.birth|age }}</small></td><td>{{ q.diagnosis }}</td>
+                        <td>{{ q.dname }}</td><td><small>{{ q.created_at[5:16] }}</small></td>
+                        <td><a class="btn btn-sm" href="{{ url_for('inpatient', req=q.id) }}#admit">{{ _('安排床位') }}</a></td></tr>
+                    {% else %}
+                    <tr><td colspan="5" class="empty">{{ _('暂无待入院申请') }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-head"><h3>{{ _('在院患者') }}</h3><span class="muted">{{ _('押金不足的患者请及时通知补交') }}</span></div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>{{ _('床位') }}</th><th>{{ _('患者') }}</th><th>{{ _('诊断') }}</th><th>{{ _('主治') }}</th><th class="num">{{ _('住院天数') }}</th><th class="num">{{ _('已产生 / 押金') }}</th></tr></thead>
+                    <tbody>
+                    {% for a in inpatients %}
+                    <tr class="{% if a.fee > a.deposit %}row-warn{% endif %}">
+                        <td>{{ a.ward }} {{ a.bed_no }}</td><td><b>{{ a.pname }}</b> <small>{{ _(a.gender) }} {{ a.birth|age }}</small></td>
+                        <td>{{ a.diagnosis }}</td><td>{{ a.dname or '—' }}</td><td class="num">{{ a.days }}</td>
+                        <td class="num">{{ a.fee|money }} / {{ a.deposit|money }}{% if a.fee > a.deposit %} <b class="text-danger">{{ _('欠费') }}</b>{% endif %}</td></tr>
+                    {% else %}
+                    <tr><td colspan="6" class="empty">{{ _('暂无在院患者') }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div>{{ quick_card() }}</div>
+</div>
+{% endif %}
+{% endblock %}

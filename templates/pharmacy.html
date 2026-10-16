@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% set active_menu = 'pharmacy' %}
+{% block title %}{{ _('药房管理') }}{% endblock %}
+{% block heading %}{{ _('药房管理') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ _('药房管理') }}</h1>
+    <span class="desc">{{ _('患者缴费后处方进入待发药队列；发药时自动扣减库存') }}</span>
+</div>
+
+<div class="tabs">
+    <a href="{{ url_for('pharmacy', tab='dispense') }}" class="{% if tab == 'dispense' %}active{% endif %}">{{ _('处方发药') }} {% if to_dispense %}<span class="badge danger">{{ to_dispense|length }}</span>{% endif %}</a>
+    <a href="{{ url_for('pharmacy', tab='stock') }}" class="{% if tab == 'stock' %}active{% endif %}">{{ _('药品库存') }}</a>
+</div>
+
+{% if tab == 'dispense' %}
+<div class="grid grid-side">
+    <div class="card">
+        <div class="card-head"><h3>{{ _('待发药') }}</h3><span class="muted">{{ _('按缴费先后排序') }}</span></div>
+        {% for rx in to_dispense %}
+        <div class="sub-card">
+            <div class="card-head" style="margin-bottom:8px">
+                <b style="font-size:16px">{{ rx.pname }}</b><small>{{ rx.card_no }} · {{ _(rx.gender) }} {{ rx.birth|age }}</small>
+                <div class="right"><small>{{ rx.rx_no }} · {{ rx.dept_name }} {{ rx.dname }} {{ _('· 缴费') }} {{ rx.paid_at[11:16] }}</small></div>
+            </div>
+            <table>
+                <thead><tr><th>{{ _('药品') }}</th><th>{{ _('规格') }}</th><th class="num">{{ _('数量') }}</th><th>{{ _('用法用量') }}</th><th class="num">{{ _('当前库存') }}</th></tr></thead>
+                <tbody>
+                {% for it in items[rx.id] %}
+                <tr class="{% if it.stock < it.qty %}row-warn{% endif %}"><td><b>{{ it.name }}</b></td><td>{{ it.spec }}</td><td class="num">{{ it.qty }} {{ it.unit }}</td><td>{{ it.usage }}</td>
+                    <td class="num">{% if it.stock < it.qty %}<b class="text-danger">{{ it.stock }} {{ _('不足') }}</b>{% else %}{{ it.stock }}{% endif %}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            <form method="post" action="{{ url_for('pharmacy_dispense', rx_id=rx.id) }}" class="form-actions" style="justify-content:flex-end;margin-top:10px">
+                <span class="muted" style="margin-right:auto">{{ _('诊断：') }}{{ rx.diagnosis }}</span>
+                <button class="btn" data-confirm="{{ _('请确认已按处方核对药品（四查十对），确定为 {0} 发药？', rx.pname) }}">{{ _('核对无误，发药') }}</button>
+            </form>
+        </div>
+        {% else %}
+        <div class="empty">{{ _('没有待发药的处方') }}</div>
+        {% endfor %}
+    </div>
+    <div class="card">
+        <div class="card-head"><h3>{{ _('今日已发药') }}</h3><span class="muted">{{ dispensed|length }} {{ _('张') }}</span></div>
+        {% for rx in dispensed %}
+        <div style="padding:8px 0;border-bottom:1px solid var(--line)">
+            <b>{{ rx.pname }}</b> <small>{{ rx.dispensed_at[11:16] }}</small>
+            <span class="badge ok" style="float:right">{{ _('已发药') }}</span><br>
+            <small>{% for it in items[rx.id] %}{{ it.name }}×{{ it.qty }}{% if not loop.last %}{{ _('、') }}{% endif %}{% endfor %}</small>
+        </div>
+        {% else %}<div class="empty">{{ _('今日暂无') }}</div>{% endfor %}
+    </div>
+</div>
+
+{% else %}
+<div class="card">
+    <div class="card-head">
+        <form class="search-bar" method="get">
+            <input type="hidden" name="tab" value="stock">
+            <div class="input-clear"><input name="q" value="{{ q }}" placeholder="{{ _('药品名称 / 编码 / 分类') }}">
+                <button type="button" class="x" title="{{ _('清除') }}">×</button></div>
+            <button class="btn">{{ _('搜索') }}</button>
+        </form>
+        <div class="right">
+            {% for c in categories %}<a class="chip" href="{{ url_for('pharmacy', tab='stock', q=c) }}">{{ c }}</a>{% endfor %}
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>{{ _('编码') }}</th><th>{{ _('药品名称') }}</th><th>{{ _('规格') }}</th><th>{{ _('分类') }}</th><th class="num">{{ _('单价（元）') }}</th><th class="num">{{ _('库存') }}</th><th>{{ _('状态') }}</th><th>{{ _('入库') }}</th></tr></thead>
+            <tbody>
+            {% for d in drugs %}
+            <tr class="{% if d.stock <= d.warn_level %}row-warn{% endif %}">
+                <td>{{ d.code }}</td>
+                <td><b>{{ d.name }}</b>{% if d.allergen %} <span class="tag" title="{{ _('开方时将校验患者过敏史') }}">{{ _('过敏原：') }}{{ d.allergen }}</span>{% endif %}</td>
+                <td>{{ d.spec }}</td><td>{{ d.category }}</td>
+                <td class="num">
+                    <form method="post" action="{{ url_for('pharmacy_price', drug_id=d.id) }}" class="inline-form" title="{{ _('修改单价') }}">
+                        <input type="hidden" name="q" value="{{ q }}">
+                        <input name="price" type="number" min="0.01" step="0.01" value="{{ '%.2f'|format(d.price) }}" required style="width:80px">
+                        <button class="btn btn-sm btn-ghost" data-confirm="{{ _('确定将 {0} 调价吗？\n已开具的处方仍按原价结算。', d.name) }}">{{ _('调价') }}</button>
+                    </form>
+                </td>
+                <td class="num"><b>{{ d.stock }}</b> {{ d.unit }}</td>
+                <td>{% if d.stock <= d.warn_level %}<span class="badge danger">{{ _('低于预警线') }} {{ d.warn_level }}</span>{% else %}<span class="badge ok">{{ _('充足') }}</span>{% endif %}</td>
+                <td>
+                    <form method="post" action="{{ url_for('pharmacy_stock_in', drug_id=d.id) }}" class="inline-form">
+                        <input type="hidden" name="q" value="{{ q }}">
+                        <input name="qty" type="number" min="1" max="10000" placeholder="{{ _('数量') }}" required>
+                        <button class="btn btn-sm btn-outline">{{ _('入库') }}</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="empty">{{ _('没有匹配的药品') }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<details class="card" {% if not drugs %}open{% endif %}>
+    <summary style="cursor:pointer;font-weight:bold;font-size:16px">{{ _('＋ 新增药品到目录') }}</summary>
+    <form method="post" action="{{ url_for('pharmacy_drug_new') }}" style="margin-top:14px" data-once>
+        <div class="grid grid-4">
+            <div class="field"><label>{{ _('药品编码') }}<span class="req">*</span></label><input name="code" placeholder="{{ _('如 YP017') }}" required></div>
+            <div class="field"><label>{{ _('药品名称') }}<span class="req">*</span></label><input name="name" required></div>
+            <div class="field"><label>{{ _('规格') }}</label><input name="spec" placeholder="{{ _('如 0.5g×24片') }}"></div>
+            <div class="field"><label>{{ _('单位') }}</label><input name="unit" value="{{ _('盒') }}"></div>
+            <div class="field"><label>{{ _('单价（元）') }}<span class="req">*</span></label><input name="price" type="number" step="0.01" min="0.01" required></div>
+            <div class="field"><label>{{ _('初始库存') }}<span class="req">*</span></label><input name="stock" type="number" min="0" value="0" required></div>
+            <div class="field"><label>{{ _('预警线') }}<span class="req">*</span></label><input name="warn_level" type="number" min="0" value="20" required></div>
+            <div class="field"><label>{{ _('分类') }}</label><input name="category" list="catList"><datalist id="catList">{% for c in categories %}<option value="{{ c }}">{% endfor %}</datalist></div>
+            <div class="field"><label>{{ _('过敏原关键字') }} <span class="tip" title="{{ _('如“青霉素”，患者有对应过敏史时开方会提醒') }}">?</span></label><input name="allergen" placeholder="{{ _('无则留空') }}"></div>
+        </div>
+        <div class="form-actions"><button class="btn">{{ _('保存药品') }}</button></div>
+    </form>
+</details>
+{% endif %}
+{% endblock %}

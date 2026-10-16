@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="{{ 'en' if get_lang() == 'en' else 'zh-CN' }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{% endblock %} - {{ _('医院信息管理系统') }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<aside class="sidebar">
+    <div class="brand">
+        <span class="logo"></span>
+        <div><b>{{ _('医院信息系统') }}</b><small>{{ _('门诊 · 药房 · 住院') }}</small></div>
+    </div>
+    <nav>
+        {% for ep, label, ic, roles in menu %}
+        <a href="{{ url_for(ep) }}" data-key="{{ loop.index }}" title="{{ _('快捷键') }} Alt+{{ loop.index }}"
+           class="nav-item {% if active_menu == ep %}active{% endif %}">
+            {{ icon(ic) }}{{ _(label) }}
+            {% if badges.get(ep) %}<span class="nav-badge" title="{{ _('待处理数量') }}">{{ badges[ep] }}</span>{% endif %}
+            <kbd>Alt+{{ loop.index }}</kbd>
+        </a>
+        {% endfor %}
+    </nav>
+    <div class="sidebar-foot">
+        {{ _('门诊服务热线 0411-8888 1200') }}<br>
+        {{ _('信息科技术支持 分机 6016') }}
+    </div>
+</aside>
+
+<div class="main">
+    <header class="topbar">
+        <div class="crumb">HIS / <b>{% block heading %}{% endblock %}</b></div>
+        {% if can_search %}
+        <form class="global-search" action="{{ url_for('patients') }}">
+            {{ icon('search', 16) }}
+            <input id="globalSearch" name="q" placeholder="{{ _('搜索患者：姓名 / 就诊卡号 / 手机号（按 / 快速定位）') }}" autocomplete="off">
+        </form>
+        {% else %}<div style="margin-left:auto"></div>{% endif %}
+        <div class="clock" id="clock"></div>
+        <div class="lang-switch">
+            {% for code, name in LANG_NAMES.items() %}
+            {% if code == get_lang() %}<b>{{ name }}</b>{% else %}<a href="{{ url_for('switch_language', code=code) }}"
+               data-confirm="{{ _('切换语言后将显示另一套演示数据，需要重新登录。是否继续？') }}">{{ name }}</a>{% endif %}
+            {% endfor %}
+        </div>
+        <div class="user-box">
+            <a href="{{ url_for('profile') }}" class="user-link" title="{{ _('个人中心 / 修改密码') }}">
+            <span class="avatar">{{ session.name[0] }}</span>
+            <div>
+                <b>{{ session.name }}</b>
+                <span class="role">{{ session.dept_name }} {{ session.title or role_name }}</span>
+            </div>
+            </a>
+            <a class="btn btn-ghost btn-sm" href="{{ url_for('logout') }}" data-confirm="{{ _('确定要退出登录吗？未保存的内容将会丢失。') }}">{{ _('退出') }}</a>
+        </div>
+    </header>
+
+    <div class="toasts">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+        <div class="toast {{ cat }}">
+            <span class="t-title">{{ _({'success': '成功', 'danger': '错误', 'warning': '注意'}.get(cat, '提示')) }}</span>
+            <div class="msg">{{ msg }}</div>
+            <button class="close" title="{{ _('关闭') }}">×</button>
+        </div>
+        {% endfor %}
+        {% endwith %}
+    </div>
+
+    <main class="content">
+        {% block content %}{% endblock %}
+    </main>
+</div>
+
+<div class="modal" id="confirmModal">
+    <div class="modal-box">
+        <h3>{{ _('操作确认') }}</h3>
+        <p></p>
+        <div class="form-actions">
+            <button class="btn btn-ghost cancel">{{ _('取消') }}</button>
+            <button class="btn ok">{{ _('确定') }}</button>
+        </div>
+    </div>
+</div>
+
+<script>window.I18N = {{ js_strings()|tojson }}; window.LANG = {{ get_lang()|tojson }};</script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

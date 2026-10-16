@@ -1,0 +1,187 @@
+{% extends 'base.html' %}
+{% set active_menu = 'inpatient' %}
+{% block title %}{{ _('住院管理') }}{% endblock %}
+{% block heading %}{{ _('住院管理') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ _('住院管理') }}</h1>
+    <span class="desc">{% if dept_id %}{{ _('显示{0}病区及本科室收治的患者 ·', session.dept_name) }} {% endif %}{{ _('床位费按病区计算，护理费 ¥{0}/天，出院时与押金自动结算', nursing_fee) }}</span>
+    <div class="actions"><a class="btn" href="#admit">{{ _('＋ 办理入院') }}</a></div>
+</div>
+{% with tab = 'beds' %}{% include '_inpatient_tabs.html' %}{% endwith %}
+
+<div class="card">
+    <div class="card-head"><h3>{{ _('待入院申请') }}</h3>
+        {% if pending %}<span class="badge danger">{{ pending|length }}</span>{% endif %}
+        <span class="muted">{{ _('医生开具住院证后出现在这里，安排床位并收取押金后完成入院') }}</span></div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>{{ _('申请单号') }}</th><th>{{ _('患者') }}</th><th>{{ _('入院诊断') }}</th><th>{{ _('病情说明') }}</th><th>{{ _('开具医生') }}</th><th>{{ _('开具时间') }}</th><th>{{ _('操作') }}</th></tr></thead>
+            <tbody>
+            {% for q in pending %}
+            <tr class="{% if chosen and chosen.id == q.id %}row-current{% endif %}">
+                <td><small>{{ q.req_no }}</small></td>
+                <td><b>{{ q.pname }}</b> <small>{{ _(q.gender) }} {{ q.birth|age }} · {{ q.card_no }}</small>
+                    {% if q.allergy %}<br><span class="allergy-tag">{{ _('过敏：') }}{{ q.allergy }}</span>{% endif %}</td>
+                <td>{{ q.diagnosis }}</td>
+                <td><small>{{ q.note or '—' }}</small></td>
+                <td>{{ q.dept_name }} · {{ q.dname }}</td>
+                <td><small>{{ q.created_at[5:16] }}</small></td>
+                <td style="white-space:nowrap">
+                    <a class="btn btn-sm" href="{{ url_for('inpatient', req=q.id) }}#admit">{{ _('安排床位') }}</a>
+                    <form method="post" action="{{ url_for('admission_request_cancel', qid=q.id) }}" style="display:inline">
+                        <input type="hidden" name="back" value="{{ url_for('inpatient') }}">
+                        <button class="btn btn-sm btn-ghost" data-confirm="{{ _('确定退回 {0} 的住院申请吗？\n（如患者放弃住院）', q.pname) }}">{{ _('退回') }}</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="empty">{{ _('暂无待入院申请') }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-head">
+        <h3>{{ _('床位一览') }}</h3>
+        <div class="legend">
+            <span><i style="background:var(--primary-soft)"></i>{{ _('空闲（点击办理入院）') }}</span>
+            <span><i style="background:var(--primary)"></i>{{ _('占用') }}</span>
+            <span><i style="background:var(--muted-bg)"></i>{{ _('维修 / 停用') }}</span>
+        </div>
+    </div>
+    {% if not wards %}
+    <div class="empty">{{ session.dept_name }}{{ _('没有独立病区，目前也没有本科室收治的住院患者。需要收治时可在下方选择其他病区的床位。') }}</div>
+    {% endif %}
+    {% for ward, beds in wards.items() %}
+    {% set used = beds|selectattr('status', 'equalto', '占用')|list|length %}
+    <div class="ward">
+        <h3>{{ ward }} <small class="muted">{{ _('占用') }} {{ used }} / {{ beds|length }} {{ _('· 床位费 ¥') }}{{ beds[0].daily_fee|int }}{{ _('/天') }}</small></h3>
+        <div class="beds">
+            {% for b in beds %}
+            {% if b.adm_id %}
+            <div class="bed busy">
+                <div class="no"><span>{{ b.bed_no }}</span><span class="badge info">{{ _('住院第 {0} 天', b.days) }}</span></div>
+                <div class="who">{{ b.pname }} <small class="muted">{{ _(b.gender) }} {{ b.birth|age }}</small></div>
+                <div class="meta">{{ b.diagnosis }} {{ _('· 主治') }} {{ b.dname or '—' }}</div>
+                {% if b.allergy %}<div class="meta text-danger">{{ _('过敏：') }}{{ b.allergy }}</div>{% endif %}
+                <div class="meta">{{ _('押金') }} {{ b.deposit|money }} {{ _('· 已产生') }} {{ b.fee|money }}
+                    {% if b.fee > b.deposit %}<b class="text-danger">{{ _('（欠费）') }}</b>{% endif %}</div>
+                <div class="foot">
+                    <form method="post" action="{{ url_for('inpatient_discharge', aid=b.adm_id) }}">
+                        <button class="btn btn-sm btn-outline" data-danger
+                                data-confirm="{{ _('确定为 {0} 办理出院结算吗？\n住院 {1} 天，费用 ¥{2}，押金 ¥{3}。', b.pname, b.days, '%.2f'|format(b.fee), '%.2f'|format(b.deposit)) }}&#10;{% if b.deposit >= b.fee %}{{ _('应退还 ¥{0}', '%.2f'|format(b.deposit - b.fee)) }}{% else %}{{ _('需补缴 ¥{0}', '%.2f'|format(b.fee - b.deposit)) }}{% endif %}">{{ _('出院结算') }}</button>
+                    </form>
+                    <form method="post" action="{{ url_for('bed_transfer', bid=b.id) }}" class="inline-form">
+                        <input type="hidden" name="back" value="{{ url_for('inpatient') }}">
+                        <select name="to_bed" required title="{{ _('选择转入床位') }}">
+                            <option value="">{{ _('转床至') }}</option>
+                            {% for fb in free_beds %}<option value="{{ fb.id }}">{{ fb.ward[:2] }} {{ fb.bed_no }}</option>{% endfor %}
+                        </select>
+                        <button class="btn btn-sm btn-ghost" data-confirm="{{ _('确定为 {0} 办理转床吗？\n转床后按新床位的床位费计费。', b.pname) }}">{{ _('转床') }}</button>
+                    </form>
+                </div>
+                <details class="deposit-more">
+                    <summary>{{ _('补交押金') }}</summary>
+                    <form method="post" action="{{ url_for('inpatient_deposit', aid=b.adm_id) }}" class="inline-form" style="margin-top:6px">
+                        <input type="hidden" name="back" value="{{ url_for('inpatient') }}">
+                        <input name="amount" type="number" min="100" step="100" placeholder="{{ _('金额') }}" required style="width:80px">
+                        <select name="method" style="width:76px"><option>{{ _('银行卡') }}</option><option>{{ _('微信') }}</option><option>{{ _('支付宝') }}</option><option>{{ _('现金') }}</option></select>
+                        <button class="btn btn-sm" data-confirm="{{ _('确定为 {0} 收取补交押金吗？', b.pname) }}">{{ _('收取') }}</button>
+                    </form>
+                </details>
+            </div>
+            {% elif b.status == '空闲' %}
+            <a class="bed free" href="{{ url_for('inpatient', bed=b.id, req=form.req_id) if form.req_id else url_for('inpatient', bed=b.id, card=form.card, diagnosis=form.diagnosis, doctor=form.doctor_id) }}#admit" style="text-decoration:none;color:inherit">
+                <div class="no"><span>{{ b.bed_no }}</span><span class="badge ok">{{ _('空闲') }}</span></div>
+                <div class="meta" style="margin-top:auto">{{ _('点击为患者安排此床位 →') }}</div>
+            </a>
+            {% else %}
+            <div class="bed off">
+                <div class="no"><span>{{ b.bed_no }}</span><span class="badge {{ STATUS_CLASS[b.status] }}">{{ _(b.status) }}</span></div>
+                <div class="meta" style="margin-top:auto">{{ _('暂不可安排患者') }}</div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="grid grid-side">
+    <div class="card" id="admit">
+        <div class="card-head"><h3>{{ _('办理入院登记') }}</h3><span class="muted">{{ _('押金不少于 ¥') }}{{ min_deposit }}</span></div>
+        {% if chosen %}
+        <div class="alert info">{{ _('正在为 {0} 办理入院（住院证 {1}，{2} {3} 开具）。', chosen.pname, chosen.req_no, chosen.dept_name, chosen.dname) }}
+            {{ _('请选择床位并收取押金。') }}<a href="{{ url_for('inpatient') }}#admit">{{ _('取消') }}</a></div>
+        {% endif %}
+        <form method="post" action="{{ url_for('inpatient_admit') }}" data-once>
+            <input type="hidden" name="req_id" value="{{ form.req_id }}">
+            <div class="form-grid">
+                <div class="field full">
+                    <label for="card">{{ _('就诊卡号') }}<span class="req">*</span></label>
+                    <div class="input-clear"><input id="card" name="card" value="{{ form.card }}" placeholder="{{ _('输入患者就诊卡号，如 P2026000xx') }}" required autocomplete="off">
+                        <button type="button" class="x" title="{{ _('清除') }}">×</button></div>
+                    <div class="preview-box" id="patientPreview"></div>
+                    <div class="hint">{{ _('新患者请先') }} <a href="{{ url_for('patient_new', next='inpatient') }}">{{ _('建档') }}</a></div>
+                </div>
+                <div class="field">
+                    <label for="bed_id">{{ _('床位') }}<span class="req">*</span></label>
+                    <select id="bed_id" name="bed_id" required>
+                        <option value="">{{ _('请选择空闲床位') }}</option>
+                        {% for b in free_beds %}<option value="{{ b.id }}" {% if form.bed_id|string == b.id|string %}selected{% endif %}>{{ b.ward }} - {{ b.bed_no }}{{ _('（¥{0}/天）', b.daily_fee|int) }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="doctor_id">{{ _('主治医生') }}</label>
+                    <select id="doctor_id" name="doctor_id">
+                        {% for d in doctors %}<option value="{{ d.id }}" {% if form.doctor_id|string == d.id|string %}selected{% endif %}>{{ d.dept_name }} - {{ d.name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="field full">
+                    <label for="diagnosis">{{ _('入院诊断') }}<span class="req">*</span></label>
+                    <input id="diagnosis" name="diagnosis" value="{{ form.diagnosis }}" placeholder="{{ _('如：社区获得性肺炎') }}" required>
+                </div>
+                <div class="field">
+                    <label for="deposit">{{ _('预交押金（元）') }}<span class="req">*</span></label>
+                    <input id="deposit" name="deposit" type="number" min="{{ min_deposit }}" step="100" value="{{ form.deposit }}" required>
+                    <div style="margin-top:6px">{% for v in [1000, 3000, 5000, 10000] %}<span class="chip" data-deposit="{{ v }}">¥{{ v }}</span>{% endfor %}</div>
+                </div>
+                <div class="field">
+                    <label>{{ _('押金支付方式') }}</label>
+                    <div class="radio-group">
+                        {% for m in ['银行卡', '微信', '支付宝', '现金'] %}
+                        <label><input type="radio" name="method" value="{{ m }}" {% if loop.first %}checked{% endif %}><span>{{ _(m) }}</span></label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-lg" data-confirm="{{ _('请确认入院信息无误，并已收取押金。') }}">{{ _('确认入院') }}</button>
+                <a class="btn btn-ghost btn-lg" href="{{ url_for('inpatient') }}">{{ _('清空') }}</a>
+            </div>
+        </form>
+    </div>
+    <div class="card">
+        <div class="card-head"><h3>{{ _('最近出院') }}</h3></div>
+        {% for a in discharged %}
+        <div style="padding:8px 0;border-bottom:1px solid var(--line)">
+            <b>{{ a.pname }}</b> <small>{{ a.ward }} {{ a.bed_no }}</small><br>
+            <small>{{ a.admit_date }} ~ {{ a.discharge_date }} · {{ a.diagnosis }} {{ _('· 费用') }} {{ a.total_fee|money }}</small>
+        </div>
+        {% else %}<div class="empty">{{ _('暂无出院记录') }}</div>{% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const card = document.getElementById('card');
+    const preview = document.getElementById('patientPreview');
+    card.addEventListener('input', () => lookupPatient(card.value, preview));
+    document.querySelectorAll('[data-deposit]').forEach(c => c.onclick = () => { document.getElementById('deposit').value = c.dataset.deposit; });
+    lookupPatient(card.value, preview);
+</script>
+{% endblock %}

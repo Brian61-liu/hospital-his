@@ -1,0 +1,109 @@
+{% extends 'base.html' %}
+{% set active_menu = 'inpatient' %}
+{% block title %}{{ ward.name }} {{ _('- 病区设置') }}{% endblock %}
+{% block heading %}{{ _('住院管理 / 病区设置 /') }} {{ ward.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <a class="btn btn-ghost" href="{{ url_for('wards') }}">{{ _('← 返回病区设置') }}</a>
+    <h1>{{ ward.name }}</h1>
+    <span class="desc">{{ ward.dept_name or '' }} · {{ ward.location or '' }} {{ _('· 共') }} {{ ward.total }} {{ _('床，占用') }} {{ ward.used }}{{ _('，空闲') }} {{ ward.free }}</span>
+    <div class="actions"><a class="btn btn-outline" href="{{ url_for('inpatient') }}">{{ _('查看住院床位一览') }}</a></div>
+</div>
+{% with tab = 'wards' %}{% include '_inpatient_tabs.html' %}{% endwith %}
+
+<div>
+    <div class="card">
+        <div class="card-head">
+            <h3>{{ _('床位列表') }}</h3>
+            <div class="right">
+                <form method="post" action="{{ url_for('ward_add_beds', wid=ward.id) }}" class="inline-form">
+                    <input name="count" type="number" min="1" max="20" value="2" required title="{{ _('新增床位数量') }}">
+                    <button class="btn btn-sm">{{ _('增加床位') }}</button>
+                </form>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>{{ _('床号') }}</th><th>{{ _('状态') }}</th><th>{{ _('在住患者') }}</th><th>{{ _('床位费') }}</th><th>{{ _('状态设置') }}</th><th>{{ _('转床 / 删除') }}</th></tr></thead>
+                <tbody>
+                {% for b in beds %}
+                <tr class="{% if b.status in ('维修', '停用') %}row-warn{% endif %}">
+                    <td><b>{{ b.bed_no }}</b></td>
+                    <td><span class="badge {{ STATUS_CLASS[b.status] }}">{{ _(b.status) }}</span></td>
+                    <td style="min-width:200px">{% if b.adm_id %}<b>{{ b.pname }}</b> <small>{{ _(b.gender) }} {{ b.birth|age }}</small><br>
+                        <small>{{ b.diagnosis }} · {{ b.admit_date }} {{ _('入院') }}</small>{% else %}<span class="muted">—</span>{% endif %}</td>
+                    <td>
+                        <form method="post" action="{{ url_for('bed_fee', bid=b.id) }}" class="inline-form">
+                            <input name="daily_fee" type="number" min="1" step="1" value="{{ '%.0f'|format(b.daily_fee) }}" required style="width:70px"
+                                   {% if b.status == '占用' %}disabled title="{{ _('有患者在住，出院后再调整') }}"{% endif %}>
+                            <button class="btn btn-sm btn-ghost" {% if b.status == '占用' %}disabled{% endif %}>{{ _('调整') }}</button>
+                        </form>
+                    </td>
+                    <td>
+                        {% if b.status == '占用' %}
+                        <span class="muted">{{ _('在住，不可修改') }}</span>
+                        {% else %}
+                        <form method="post" action="{{ url_for('bed_status', bid=b.id) }}" class="inline-form">
+                            <select name="status">
+                                {% for s in bed_statuses %}<option value="{{ s }}" {% if s == b.status %}selected{% endif %}>{{ _(s) }}</option>{% endfor %}
+                            </select>
+                            <button class="btn btn-sm btn-ghost">{{ _('保存') }}</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if b.adm_id %}
+                        <form method="post" action="{{ url_for('bed_transfer', bid=b.id) }}" class="inline-form">
+                            <select name="to_bed" required style="width:120px">
+                                <option value="">{{ _('选择新床位') }}</option>
+                                {% for fb in free_beds %}<option value="{{ fb.id }}">{{ fb.ward }} {{ fb.bed_no }}</option>{% endfor %}
+                            </select>
+                            <input name="reason" placeholder="{{ _('转床原因') }}" style="width:100px">
+                            <button class="btn btn-sm btn-outline" data-confirm="{{ _('确定将 {0} 从 {1} 床转出吗？\n转床后按新床位的床位费计费。', b.pname, b.bed_no) }}">{{ _('转床') }}</button>
+                        </form>
+                        {% else %}
+                        <form method="post" action="{{ url_for('bed_delete', bid=b.id) }}">
+                            <button class="btn btn-sm btn-danger" data-danger data-confirm="{{ _('确定删除 {0} 床吗？删除后不可恢复。', b.bed_no) }}{% if b.used_times %}&#10;{{ _('该床位有历史住院记录，系统将拒绝删除，建议改为“停用”。') }}{% endif %}">{{ _('删除') }}</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="empty">{{ _('本病区还没有床位，可通过右上角“增加床位”添加') }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="grid grid-2">
+        <div class="card">
+            <div class="card-head"><h3>{{ _('病区信息') }}</h3><span class="tag">{{ _('床号前缀') }} {{ ward.code }}</span></div>
+            <form method="post" action="{{ url_for('ward_edit', wid=ward.id) }}">
+                <div class="field"><label>{{ _('病区名称') }}<span class="req">*</span></label><input name="name" value="{{ ward.name }}" required></div>
+                <div class="field" style="margin-top:10px"><label>{{ _('所属科室') }}</label>
+                    <select name="dept_id">{% for d in depts %}<option value="{{ d.id }}" {% if d.id == ward.dept_id %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></div>
+                <div class="field" style="margin-top:10px"><label>{{ _('位置') }}</label><input name="location" value="{{ ward.location or '' }}"></div>
+                <div class="form-grid" style="margin-top:10px">
+                    <div class="field"><label>{{ _('护士长') }}</label><input name="head_nurse" value="{{ ward.head_nurse or '' }}"></div>
+                    <div class="field"><label>{{ _('联系电话') }}</label><input name="phone" value="{{ ward.phone or '' }}"></div>
+                </div>
+                <div class="field" style="margin-top:10px"><label>{{ _('标准床位费（元/天）') }}<span class="req">*</span></label>
+                    <input name="bed_fee" type="number" min="1" step="1" value="{{ '%.0f'|format(ward.bed_fee) }}" required>
+                    <label style="font-weight:normal;margin-top:6px;display:flex;gap:6px;align-items:center">
+                        <input type="checkbox" name="sync_fee" value="1" style="width:auto"> {{ _('同步调整本病区空闲床位的床位费（在住床位出院后再调整）') }}</label>
+                    <div class="hint">{{ _('新增床位默认使用标准床位费') }}</div>
+                </div>
+                <div class="form-actions"><button class="btn">{{ _('保存病区信息') }}</button></div>
+            </form>
+        </div>
+        <div class="card" style="align-self:start">
+            <div class="card-head"><h3>{{ _('撤销病区') }}</h3></div>
+            <p class="muted" style="margin-bottom:10px">{{ _('只有当病区内没有任何床位时才能撤销。') }}</p>
+            <form method="post" action="{{ url_for('ward_delete', wid=ward.id) }}">
+                <button class="btn btn-danger" data-danger data-confirm="{{ _('确定撤销“{0}”吗？此操作不可恢复。', ward.name) }}" {% if ward.total %}disabled title="{{ _('请先删除全部床位') }}"{% endif %}>{{ _('撤销病区') }}</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

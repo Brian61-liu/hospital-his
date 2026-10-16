@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% set active_menu = 'patients' %}
+{% set title_text = _('新建患者档案') if mode == 'new' else _('编辑患者档案') %}
+{% block title %}{{ title_text }}{% endblock %}
+{% block heading %}{{ _('患者档案 /') }} {{ title_text }}{% endblock %}
+
+{% macro field(name, label, required=False, hint='', type='text', placeholder='') %}
+<div class="field {% if errors.get(name) %}has-err{% endif %}">
+    <label for="{{ name }}">{{ label }}{% if required %}<span class="req">*</span>{% endif %}</label>
+    <div class="input-clear">
+        <input id="{{ name }}" name="{{ name }}" type="{{ type }}" value="{{ form.get(name) or '' }}" placeholder="{{ placeholder }}"
+               {% if required %}required{% endif %} {% if type == 'date' %}max="{{ today_iso }}"{% endif %}>
+        {% if type != 'date' %}<button type="button" class="x" title="{{ _('清除') }}">×</button>{% endif %}
+    </div>
+    {% if errors.get(name) %}<div class="err">{{ errors[name] }}</div>{% elif hint %}<div class="hint">{{ hint }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="page-head">
+    <h1>{{ title_text }}</h1>
+    {% if mode == 'edit' %}<span class="desc">{{ _('就诊卡号') }} {{ patient.card_no }}</span>{% else %}<span class="desc">{{ _('保存后系统将自动生成就诊卡号') }}</span>{% endif %}
+</div>
+
+<div class="card" style="max-width: 900px">
+    <form method="post" data-once>
+        <div class="form-grid">
+            {{ field('name', _('姓名'), True, placeholder=_('请输入患者真实姓名')) }}
+            <div class="field {% if errors.get('gender') %}has-err{% endif %}">
+                <label>{{ _('性别') }}<span class="req">*</span></label>
+                <div class="radio-group">
+                    {% for g in ['男', '女'] %}
+                    <label><input type="radio" name="gender" value="{{ g }}" {% if form.get('gender') == g %}checked{% endif %} required><span>{{ _(g) }}</span></label>
+                    {% endfor %}
+                </div>
+                {% if errors.get('gender') %}<div class="err">{{ errors.gender }}</div>{% endif %}
+            </div>
+            {{ field('birth', _('出生日期'), True, type='date', hint=_('用于计算年龄与儿科用药剂量')) }}
+            {{ field('phone', _('手机号'), True, hint=_('11位手机号，用于接收就诊提醒'), placeholder=_('例如 13800000000')) }}
+            {{ field('id_card', _('身份证号'), hint=_('选填；儿童可不填'), placeholder=_('18位身份证号')) }}
+            <div class="field {% if errors.get('insurance') %}has-err{% endif %}">
+                <label>{{ _('医保类型') }}<span class="req">*</span><span class="tip" title="{{ _('职工医保统筹支付70%，居民医保统筹支付50%') }}">?</span></label>
+                <div class="radio-group">
+                    {% for ins in ['自费', '城镇职工医保', '城乡居民医保'] %}
+                    <label><input type="radio" name="insurance" value="{{ ins }}" {% if form.get('insurance') == ins %}checked{% endif %}><span>{{ _(ins) }}</span></label>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="field full">
+                <label for="allergy">{{ _('药物过敏史') }}<span class="tip" title="{{ _('医生开处方时会根据此项自动校验过敏风险') }}">?</span></label>
+                <div class="input-clear"><input id="allergy" name="allergy" value="{{ form.get('allergy') or '' }}" placeholder="{{ _('无过敏史请留空；多个用顿号分隔，如：青霉素、磺胺类') }}">
+                    <button type="button" class="x" title="{{ _('清除') }}">×</button></div>
+                <div style="margin-top:6px">{{ _('常见：') }}
+                    {% for a in ['青霉素', '头孢类', '磺胺类', '喹诺酮类', '阿司匹林'] %}<span class="chip" data-allergy="{{ _(a) }}">{{ _(a) }}</span>{% endfor %}
+                </div>
+            </div>
+            {{ field('address', _('家庭住址'), placeholder=_('选填')) }}
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-lg" type="submit">{{ _('保存档案') }}</button>
+            <a class="btn btn-ghost btn-lg" href="{{ url_for('patient_detail', pid=patient.id) if mode == 'edit' else url_for('patients') }}">{{ _('取消') }}</a>
+            <span class="muted">{{ _('带') }} <b style="color:var(--danger)">*</b> {{ _('的为必填项') }}</span>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const allergy = document.getElementById('allergy');
+    document.querySelectorAll('[data-allergy]').forEach(c => c.onclick = () => {
+        const sep = t('、');                        // 中文用顿号、英文用逗号分隔多个过敏原
+        const list = allergy.value.split(sep.trim()).map(x => x.trim()).filter(Boolean);
+        if (!list.includes(c.dataset.allergy)) list.push(c.dataset.allergy);
+        allergy.value = list.join(sep);
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% set active_menu = '' %}
+{% block title %}{{ _('个人中心') }}{% endblock %}
+{% block heading %}{{ _('个人中心') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ _('个人中心') }}</h1>
+    <span class="desc">{{ _('查看个人信息，修改登录密码') }}</span>
+</div>
+
+<div class="grid grid-2" style="max-width:980px">
+    <div class="card">
+        <div class="patient-card" style="margin-bottom:16px">
+            <div class="avatar-lg">{{ user.name[0] }}</div>
+            <div><div class="name">{{ user.name }}</div><span class="muted">{{ _(ROLE_NAMES[user.role]) }}</span></div>
+        </div>
+        <dl class="kv">
+            <dt>{{ _('工号') }}</dt><dd>{{ user.username }}</dd>
+            <dt>{{ _('岗位') }}</dt><dd>{{ _(ROLE_NAMES[user.role]) }}</dd>
+            {% if user.dept_name %}<dt>{{ _('所属科室') }}</dt><dd>{{ user.dept_name }}</dd>{% endif %}
+            {% if user.title %}<dt>{{ _('职称') }}</dt><dd>{{ user.title }}</dd>{% endif %}
+            {% if user.role == 'doctor' %}
+            <dt>{{ _('挂号费') }}</dt><dd>{{ user.reg_fee|money }}</dd>
+            <dt>{{ _('擅长') }}</dt><dd>{{ user.specialty or '—' }}</dd>
+            {% endif %}
+        </dl>
+    </div>
+    <div class="card">
+        <div class="card-head"><h3>{{ _('修改密码') }}</h3></div>
+        <form method="post" data-once>
+            <div class="field"><label for="old">{{ _('原密码') }}<span class="req">*</span></label>
+                <input id="old" name="old" type="password" autocomplete="current-password" required></div>
+            <div class="field" style="margin-top:12px"><label for="new">{{ _('新密码') }}<span class="req">*</span></label>
+                <input id="new" name="new" type="password" minlength="6" autocomplete="new-password" required>
+                <div class="hint">{{ _('至少 6 位，建议包含字母和数字') }}</div></div>
+            <div class="field" style="margin-top:12px"><label for="again">{{ _('确认新密码') }}<span class="req">*</span></label>
+                <input id="again" name="again" type="password" minlength="6" autocomplete="new-password" required>
+                <div class="err" id="mismatch" style="display:none">{{ _('两次输入的新密码不一致') }}</div></div>
+            <div class="form-actions"><button class="btn">{{ _('保存新密码') }}</button></div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const pw1 = document.getElementById('new'), pw2 = document.getElementById('again');
+    pw2.addEventListener('input', () => {
+        document.getElementById('mismatch').style.display = pw2.value && pw1.value !== pw2.value ? 'block' : 'none';
+    });
+</script>
+{% endblock %}

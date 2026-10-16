@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+{% set active_menu = 'dashboard' %}
+{% block title %}{{ _('工作台') }}{% endblock %}
+{% block heading %}{{ _('工作台') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ _('{0}，上午好', session.name) if now_hour < 12 else _('{0}，下午好', session.name) }}</h1>
+    <span class="desc">{{ _('今天是 {0}，以下是{1}今日概况 · 诊区 {2}', today_text, dept.name, dept.location) }}</span>
+</div>
+
+<div class="queue-now">
+    <div>
+        <div style="opacity:.85">{{ _('我的今日候诊') }}</div>
+        <div class="no">{{ my_queue|length }} <small style="font-size:16px">{{ _('人') }}</small></div>
+    </div>
+    <div>
+        {% if my_queue %}
+        {{ _('正在就诊') if my_queue[0].status == '就诊中' else _('下一位') }}{{ _('：') }}<b>{{ my_queue[0].pname }}</b>{{ _('（{0} {1} 号）', _(my_queue[0].period), my_queue[0].queue_no) }}
+        {% else %}{{ _('暂无候诊患者') }}{% endif %}
+    </div>
+    <a class="btn btn-lg" href="{{ url_for('clinic') }}">{{ _('进入医生工作站 →') }}</a>
+</div>
+
+<div class="grid grid-4">
+    <div class="card stat"><div class="stat-icon">{{ icon('clipboard', 22) }}</div><div><div class="num">{{ stats.dept_reg }}</div><div class="label">{{ _('{0}今日挂号', dept.name) }}</div></div></div>
+    <div class="card stat"><div class="stat-icon">{{ icon('clock', 22) }}</div><div><div class="num">{{ stats.my_waiting }}</div><div class="label">{{ _('我的候诊 / 就诊中') }}</div></div></div>
+    <div class="card stat"><div class="stat-icon">{{ icon('activity', 22) }}</div><div><div class="num">{{ stats.my_done }}</div><div class="label">{{ _('我今日已诊') }}</div></div></div>
+    <div class="card stat"><div class="stat-icon">{{ icon('bed', 22) }}</div><div><div class="num">{{ stats.dept_inpatients }}</div><div class="label">{{ _('{0}在院患者', dept.name) }}</div></div></div>
+</div>
+
+<div class="grid grid-side">
+    <div>
+        <div class="card">
+            <div class="card-head"><h3>{{ _('{0}今日挂号', dept.name) }}</h3><span class="muted">{{ _('最近 8 条') }}</span></div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>{{ _('患者') }}</th><th>{{ _('医生') }}</th><th>{{ _('时段/序号') }}</th><th>{{ _('过敏史') }}</th><th>{{ _('状态') }}</th></tr></thead>
+                    <tbody>
+                    {% for r in recent %}
+                    <tr>
+                        <td><b>{{ r.pname }}</b> <small>{{ _(r.gender) }} {{ r.birth|age }}</small></td>
+                        <td>{{ r.dname }}{% if r.doctor_id == session.user_id %} <span class="tag">{{ _('我') }}</span>{% endif %}</td>
+                        <td>{{ _('{0} {1} 号', _(r.period), r.queue_no) }}</td>
+                        <td>{% if r.allergy %}<span class="allergy-tag">{{ r.allergy }}</span>{% else %}<span class="muted">{{ _('无') }}</span>{% endif %}</td>
+                        <td><span class="badge {{ STATUS_CLASS[r.status] }}">{{ _(r.status) }}</span></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="empty">{{ _('本科室今天还没有挂号') }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-head"><h3>{{ _('{0}在院患者', dept.name) }}</h3><span class="muted">{{ _('床位由病区护士安排') }}</span></div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>{{ _('患者') }}</th><th>{{ _('床位') }}</th><th>{{ _('入院诊断') }}</th><th>{{ _('主治医生') }}</th><th>{{ _('入院日期') }}</th></tr></thead>
+                    <tbody>
+                    {% for a in inpatients %}
+                    <tr><td><b>{{ a.pname }}</b> <small>{{ _(a.gender) }} {{ a.birth|age }}</small></td>
+                        <td>{{ a.ward }} {{ a.bed_no }}</td><td>{{ a.diagnosis }}</td><td>{{ a.dname }}</td><td>{{ a.admit_date }}</td></tr>
+                    {% else %}
+                    <tr><td colspan="5" class="empty">{{ _('本科室暂无在院患者') }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <div class="card">
+            <div class="card-head"><h3>{{ _('我开具的住院申请') }}</h3></div>
+            {% for q in requests %}
+            <div style="padding:8px 0;border-bottom:1px solid var(--line)">
+                <b>{{ q.pname }}</b> <small>{{ _(q.gender) }} {{ q.birth|age }}</small>
+                <span class="badge {{ STATUS_CLASS[q.status] }}" style="float:right">{{ _(q.status) }}</span><br>
+                <small>{{ q.diagnosis }}{% if q.status == '已入院' and q.bed_no %} {{ _('· 已安排') }} {{ q.ward }} {{ q.bed_no }}{% endif %}</small>
+                {% if q.status == '待安排' %}
+                <form method="post" action="{{ url_for('admission_request_cancel', qid=q.id) }}" style="margin-top:4px">
+                    <input type="hidden" name="back" value="{{ url_for('dashboard') }}">
+                    <button class="btn btn-sm btn-ghost" data-confirm="{{ _('确定撤销 {0} 的住院申请吗？', q.pname) }}">{{ _('撤销') }}</button>
+                </form>
+                {% endif %}
+            </div>
+            {% else %}<div class="empty" style="padding:12px 0">{{ _('暂无住院申请，可在接诊页开具住院证') }}</div>{% endfor %}
+        </div>
+        <div class="card">
+            <div class="card-head"><h3>{{ _('本科室医生今日接诊') }}</h3></div>
+            {% for d in doctor_load %}
+            <div class="bar-row" style="grid-template-columns:90px 1fr 60px">
+                <span>{{ d.name }}{% if d.id == session.user_id %}{{ _('（我）') }}{% endif %}</span>
+                <div class="bar" title="{{ d.title }}"><i style="width: {{ (d.n / max_load * 100)|round }}%"></i></div>
+                <small>{{ d.done }}/{{ d.n }} {{ _('已诊') }}</small>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="card">
+            <div class="card-head"><h3>{{ _('快捷入口') }}</h3></div>
+            <div class="quick">
+                {% for ep, label, ic, roles in menu if ep != 'dashboard' %}
+                <a href="{{ url_for(ep) }}">{{ icon(ic, 20) }}{{ _(label) }}</a>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-head"><h3>{{ _('科室简介') }}</h3></div>
+            <p class="muted">{{ dept.intro }}</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
