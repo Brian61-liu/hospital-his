@@ -189,7 +189,7 @@ EN = {
     '医院信息管理系统': 'Hospital Information System', '医院信息系统': 'Hospital HIS',
     '门诊 · 药房 · 住院': 'Outpatient · Inpatient',
     '快捷键': 'Shortcut', '待处理数量': 'Pending items',
-    '门诊服务热线 0411-8888 1200': 'Hotline 0411-8888 1200',
+    '门诊服务热线 400-800-1200': 'Hotline 400-800-1200',
     '信息科技术支持 分机 6016': 'IT support ext. 6016',
     '搜索患者：姓名 / 就诊卡号 / 手机号（按 / 快速定位）': 'Search patients: name / card no. / mobile (press / to focus)',
     '切换语言后将显示另一套演示数据，需要重新登录。是否继续？': 'Switching language loads a separate demo dataset and requires signing in again. Continue?',

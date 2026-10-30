@@ -76,7 +76,7 @@
                     <select name="dept_id">{% for d in depts %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}</select></div>
                 <div class="field"><label>{{ _('位置') }}</label><input name="location" placeholder="{{ _('如 住院楼8层') }}"></div>
                 <div class="field"><label>{{ _('护士长') }}</label><input name="head_nurse"></div>
-                <div class="field"><label>{{ _('联系电话') }}</label><input name="phone" placeholder="0411-88881801"></div>
+                <div class="field"><label>{{ _('联系电话') }}</label><input name="phone" placeholder="8888-1801"></div>
                 <div class="field"><label>{{ _('床位费（元/天）') }}<span class="req">*</span></label><input name="bed_fee" type="number" min="1" step="1" value="60" required></div>
                 <div class="field full"><label>{{ _('初始床位数') }}</label><input name="count" type="number" min="0" max="50" value="8">
                     <div class="hint">{{ _('创建后也可以在病区详情中继续增加床位') }}</div></div>

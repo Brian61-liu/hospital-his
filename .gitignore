@@ -21,3 +21,6 @@ desktop.ini
 
 # Office temp files
 ~$*
+
+# Test cache
+.pytest_cache/

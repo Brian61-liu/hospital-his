@@ -1497,4 +1497,5 @@ for _lang in LANGS:                     # 首次运行时自动生成中、英�
     init_db(_lang)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # 调试模式默认关闭；本地开发可设置环境变量 FLASK_DEBUG=1
+    app.run(debug=os.environ.get('FLASK_DEBUG') == '1')
